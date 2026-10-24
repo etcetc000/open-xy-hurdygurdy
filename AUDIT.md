@@ -83,7 +83,7 @@ block and interpolated. When Drone fades to zero, bourdon and mouche pause;
 trompette continues to excite Buzz. All eight controls and three body modes
 remain. These changes intentionally alter the sound and bandwidth.
 
-Current host results, with the same SDK reference loop and Clang `-O2`:
+The v1.0.0 host results, with the same SDK reference loop and Clang `-O2`:
 
 | Probe | Highest sampled instruction equivalents per 64-sample block |
 | --- | ---: |
@@ -109,9 +109,29 @@ before/after each sweep gives the conservative figures above: render peak
 5,499.8 cycles / 173.266 * 590, onset peak 5,642.3 / 173.453 * 590.
 No conversion from these counters to elapsed seconds is assumed.
 
-The tested host estimates meet the requested sub-20k target. Device timing,
-stock effects, display contention and real multi-track scheduling still need
-qualification. No device operations were performed. The separate drone-owner
+These host estimates met the requested sub-20k host-model target; they did
+not establish sub-20k device cycles. A subsequent user-supplied device fixture
+reported 5.12% synthesis and 5.82% whole-voice time against a fixed reference
+of approximately 580,352 cycles: about 29,714 and 33,776 cycles per invocation.
+The fixture used one note at MIDI 60, velocity 127, held for 1,000 blocks then
+500 release blocks. These are configuration-specific averages, not worst-case
+cycles or verified percentages of the live audio deadline. Whole-voice timing
+includes stock per-voice processing but excludes global work and other voices.
+
+The current native optimization candidate preserves the physical model,
+sample rates, coefficients, rounding and controls. It keeps intermediate audio
+in Q15, uses a four-state polyphase form of the same half-band FIR, and compiles
+one shared string solver with a fast path for settled fractional delays.
+Native initialized code/data decreases from 21,724 to 19,438 bytes; state stays
+41,784 bytes, for 61,222 bytes total. The calculated maximum audio stack grows
+from 712 to 760 bytes because the solver is now a separate call.
+
+Twelve preset probes are sample-identical to v1.0.0. Output hashes also match
+across 128 multi-voice corner/automation/retrigger/stealing cases. Nine host
+tests pass with undefined-behavior checks, including independent FIR and scalar
+string references. These checks establish compatibility for the tested cases,
+not device speed. Re-run the same device fixture to assess the candidate;
+no device operations were performed during this pass. The separate drone-owner
 ordering bug above remains unresolved.
 
 ### 3. Sound and lifecycle qualification (medium/high)

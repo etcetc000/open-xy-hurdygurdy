@@ -23,8 +23,8 @@ struct String {
     i32 loss_1, loss_2; // Q15 bridge loss filter history
     u32 neck_delay;    // current delays, Q12 samples
     u32 bridge_delay;
-    opxy::i16 decimate[8]; // melody half-band history; unused by drones
-    u32 decimate_at;
+    opxy::i16 decimate[8]; // even sample and three odd samples; trailing words reserved
+    u32 decimate_at;      // reserved; retained to keep storage layout unchanged
     u32 primed;
 };
 
@@ -58,7 +58,7 @@ const u32 melody_slots = 8;
 struct Shared {
     opxy::LeasePool<MelodySlot, melody_slots> melody;
     DroneSet drone;
-    i32 drone_block[render_frames];
+    i32 drone_block[render_frames]; // Q15, matching the internal voice mix
     u32 drone_owner;     // voice that bows the drones; 0 when none
     u32 drone_serial;    // bumped each time the owner renders a block
     // Last soundbox controls, shared across serial voice callbacks. Keys are

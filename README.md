@@ -44,7 +44,8 @@ python ../open-xy/sdk.py check
 | File | Owns |
 | --- | --- |
 | [definition.json](definition.json) | Controls, presets, resources and the drawing shape |
-| [core.h](core.h), [engine.cpp](engine.cpp) | String, drone and voice state; bowing, chien, soundbox |
+| [core.h](core.h), [engine.cpp](engine.cpp) | String, drone and voice state; mixing, chien, soundbox |
+| [strings.h](strings.h), [strings.cpp](strings.cpp) | Shared bowed-string solver with settled-delay and moving-delay paths |
 | [tables.h](tables.h) | Friction curve, drone periods, soundbox modes, coup rates, unison ratios, loudness grid, display sine |
 | [display.h](display.h), [display.cpp](display.cpp), [panel.svg.fragment](panel.svg.fragment) | The screen |
 | [machine.json](machine.json) | SDK version, kind, requested identity (engine 36, page 84) and icon |
@@ -81,6 +82,10 @@ Notes below about 44 Hz fold up an octave.
   melody notes sound at once and a ninth takes the oldest note's strings. That
   also bounds the engine's worst-case CPU.
 - Memory: 22,976 bytes shared plus 92 bytes per voice (128 voices).
+- Internal mixing stays in Q15 until the public Q31 output boundary. The
+  half-band decimator uses four history values held in registers. The string
+  solver is compiled once in `strings.cpp`, with a constant-fraction path for
+  settled pitch. These changes preserve the original arithmetic and rounding.
 - Per sample, a sounding note costs one string (two with Unison) and the
   soundbox. The drones cost three strings once for the whole machine, only
   while Drone or Buzz is above zero. With only Buzz audible, bourdon and
@@ -88,9 +93,11 @@ Notes below about 44 Hz fold up an octave.
   The chien runs only while Buzz is up. A voice whose strings were taken
   and that holds no drones does no work.
 - Output is limited below 0.3, the declared peak.
-- Device CPU has not been measured. The SDK sweep reports about 12k host
-  instruction equivalents; see [the audit](AUDIT.md) for broader measurements.
-  Timing estimates are not a guarantee of device scheduling or polyphony.
+- A user-reported device fixture measured about 29.7k synthesis cycles and
+  33.8k whole-voice cycles before this native optimization pass. The current
+  candidate needs a new device comparison; host instruction equivalents do
+  not predict those cycle counts. See [the audit](AUDIT.md) for the fixture
+  and validation details.
   Drone ownership still needs correction before release.
 
 ## Development
@@ -105,7 +112,10 @@ presets with eight voices, different controls per voice, automation and
 retriggers. The interpolation and friction tests check numeric accuracy;
 `tests/display.cpp` checks frame bounds, initial note snapshots, reduced
 motion and geometry keys. Drone idle/resume and sustained tuning have
-additional regression tests. CI also runs these with undefined-behavior
+additional regression tests. `tests/decimation.cpp` compares the optimized
+filter with a full seven-tap FIR; `tests/string_kernel.cpp` compares settled
+and moving delays with the original scalar solver, including index wrapping.
+CI also runs these with undefined-behavior
 sanitization and compiles the native module.
 
 `python generators/friction.py` regenerates the friction curve from
