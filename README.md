@@ -51,10 +51,14 @@ python ../open-xy/sdk.py check
 
 Each string is a digital waveguide split at the wheel: a neck line (wheel to
 nut) and a bridge line (wheel to bridge), with the wheel at 11% of the string.
-The bridge reflection passes a symmetric three-tap loss filter (exactly one
-sample of delay), so a note's loop delay is the period minus one sample and
-tuning stays within a cent up to C6. The bridge side holds whole samples and
-the neck side the fraction, so each sample needs one interpolated tap.
+The bridge reflection passes a symmetric three-tap loss filter. The bridge
+side holds whole samples and the neck side the fraction, so each string
+sample needs one interpolated tap. Melody and Unison run at 22.05 kHz, while
+the three drones and soundbox run at 11.025 kHz. A half-band filter decimates
+the melody before mixing; the final signal is interpolated to 44.1 kHz.
+The feedback strings and nonlinear bow interaction remain physical models.
+The reduced rates change brightness and intonation: the tuning regression
+allows eight cents across 81 sustained melody probes from 110 to 1,760 Hz.
 Friction follows the STK bowed-string curve, clip((u + 0.75)^-4, 0.01, 0.98),
 in a 1,025-entry table with nearest-entry lookup. Wheel sets bow speed and string brightness, Rosin the
 curve's slope and the wheel's roughness noise. A measured Wheel × Rosin
@@ -66,23 +70,25 @@ Notes below about 44 Hz fold up an octave.
 
 ## Native notes
 
-- 32-bit arithmetic only: Q31 signals through `opxy::q31::multiply`, Q12 delay
+- 32-bit arithmetic only: Q15 audio/filter state, Q31 control envelopes, Q12 delay
   lengths, pitch-to-period division only when the sampled pitch changes.
   No 64-bit helpers. Unison gain uses unsigned constant division to avoid a
   software division helper inside the sample loop.
-- Delay lines store Q15 words. A melody slot (chanterelle and twin) is 4.6 KiB;
+- Delay lines store Q15 words. A melody slot (chanterelle and twin) is about 2.34 KiB;
   eight slots are shared by every track through `LeasePool`, so at most eight
   melody notes sound at once and a ninth takes the oldest note's strings. That
   also bounds the engine's worst-case CPU.
-- Memory: 44,676 bytes shared plus 88 bytes per voice (128 voices).
+- Memory: 22,976 bytes shared plus 92 bytes per voice (128 voices).
 - Per sample, a sounding note costs one string (two with Unison) and the
   soundbox. The drones cost three strings once for the whole machine, only
-  while Drone or Buzz is above zero; the chien runs only while Buzz is up. A
-  voice whose strings were taken and that holds no drones does no work.
-- Output peaks near 0.22 in normal use and is limited at 0.3, the declared
-  peak.
-- Device CPU has not been measured. The current SDK host estimate exceeds
-  its CPU guidance; see [the audit](AUDIT.md) for measured scenarios and limits.
+  while Drone or Buzz is above zero. With only Buzz audible, bourdon and
+  mouche pause after their level fades to zero, then resume when Drone rises.
+  The chien runs only while Buzz is up. A voice whose strings were taken
+  and that holds no drones does no work.
+- Output is limited below 0.3, the declared peak.
+- Device CPU has not been measured. The SDK sweep reports about 12k host
+  instruction equivalents; see [the audit](AUDIT.md) for broader measurements.
+  Timing estimates are not a guarantee of device scheduling or polyphony.
   Drone ownership still needs correction before release.
 
 ## Development
@@ -96,19 +102,27 @@ unison shutdown and voice stealing. `tests/presets.cpp` exercises all twelve
 presets with eight voices, different controls per voice, automation and
 retriggers. The interpolation and friction tests check numeric accuracy;
 `tests/display.cpp` checks frame bounds, initial note snapshots, reduced
-motion and geometry keys. CI also runs these with undefined-behavior
+motion and geometry keys. Drone idle/resume and sustained tuning have
+additional regression tests. CI also runs these with undefined-behavior
 sanitization and compiles the native module.
 
 `python generators/friction.py` regenerates the friction curve from
 clip((u + 0.75)^-4, 0.01, 0.98). The nearest-entry approximation changes the
 sound slightly; it avoids interpolation in every string sample. Body and
 level coefficients are cached until their controls change.
+`python generators/rates.py` regenerates the body/chien poles and envelope
+decays at quarter rate from the original coefficients in
+`generators/filter_reference.json`.
 
 `benchmarks/audio.cpp` times one and eight voices with melody, unison, drones,
 all features, and unison switched off. Compile with `-std=c++11 -O2`,
 `-I../open-xy/sdk/include -I.`, placing the executable in the SDK local folder.
 It also reproduces the outstanding drone-owner ordering issue. Host timing
 is diagnostic and has no pass/fail performance threshold.
+`benchmarks/corners.cpp` extends this to 2,816 settings: continuous-control
+corners, eight pitch inputs including extremes, segment pitch modulation,
+and every tonic in four heavy combinations. It reports the best of seven
+2,048-block timings after warmup for each setting.
 
 The requested engine/page numbers are hints for a new build. Preserve the
 previous package layout when rebuilding existing projects; an older image

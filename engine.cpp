@@ -11,7 +11,7 @@
 // to note. The trompette rattles the chien (the buzzing bridge) when the
 // wheel is stroked. Everything passes through a three-mode soundbox.
 //
-// Fixed point throughout: Q31 signals, Q12 delay lengths, 32-bit arithmetic
+// Fixed point throughout: Q15 audio, Q31 control envelopes, Q12 delays; 32-bit arithmetic
 // only (no 64-bit helpers are linked on the device).
 
 namespace hurdygurdy {
@@ -23,12 +23,12 @@ const i32 maximum = 2147483647;
 const u32 neck_mask = neck_size - 1;
 const u32 bridge_mask = bridge_size - 1;
 const u32 q12 = 4096;
-const u32 longest_period = 1000u * q12;  // 44.1 Hz; lower notes fold up an octave
-const u32 shortest_period = 12u * q12;   // about 3.7 kHz
+const u32 longest_period = 250u * q12;  // quarter-rate samples; 44.1 Hz lower bound
+const u32 shortest_period = 3u * q12;    // about 3.7 kHz
 const u32 main_position = 113;           // wheel contact, Q10 fraction of the string (0.11)
 const u32 twin_position = 128;           // 0.125
 const u32 drone_position = 117;
-const u32 segment = 16;                  // pitch updates every 16 samples
+const u32 segment = 4;                 // pitch updates every 16 device samples
 
 // Control slots in definition.json order: the four encoders (blue, green,
 // white, orange), then one alternate per encoder: Rosin, Coup, Drone, Tonic.
@@ -76,60 +76,50 @@ struct Controls {
 // How the wheel meets the string: bow speed, friction curve and string loss.
 struct Bowing {
     i32 speed;   // target bow velocity, Q31 (a quarter of STK's units)
-    i32 slope;   // friction curve slope / 8, Q31
-    i32 side;    // bridge loss filter: side taps and centre tap
+    i32 slope;   // friction curve slope / 8, Q15
+    i32 side;    // Q15 bridge loss filter: side taps and centre tap
     i32 centre;
-    i32 roughness; // relative wheel noise
+    i32 roughness; // relative wheel noise, Q15
     explicit Bowing(const Controls& c) {
         speed = 13958644 + multiply(c.wheel, 111669150);     // 0.0065 .. 0.0585
-        slope = 1234803098 - multiply(c.rosin, 912680550);   // slope 4.6 .. 1.2
-        side = 251255586 - multiply(c.wheel, 125627793);     // taps 0.117 .. 0.059: brighter when faster
-        centre = 2093796557 - side - side;                   // DC gain 0.975
-        roughness = 64424509 + multiply(c.rosin, 429496730); // 0.03 .. 0.23
+        slope = (1234803098 - multiply(c.rosin, 912680550)) / 65536;   // slope 4.6 .. 1.2
+        side = (251255586 - multiply(c.wheel, 125627793)) / 1048576;     // quarter-rate loss magnitude correction
+        centre = 31948 - side - side;                   // DC gain 0.975
+        roughness = (64424509 + multiply(c.rosin, 429496730)) / 65536; // 0.03 .. 0.23
     }
 };
 
-// Wheel noise: white LCG noise through a one-pole low-pass (about 220 Hz).
+// Wheel noise: Q31 LCG/filter state, Q15 output, about 220 Hz at quarter rate.
 inline i32 roughen(u32& random, i32& noise) {
     random = random * 1664525u + 1013904223u;
     const i32 white = static_cast<i32>(random);
-    noise += white / 32 - noise / 32;
-    return noise;
+    noise += white / 8 - noise / 8;
+    return noise / 131072;
 }
 
-// Delay tap `delay` (Q12) samples behind the next write position, linearly
-// interpolated. Lines hold Q15 words; taps return Q31.
+// Fractional delay interpolation at the delay lines' Q15 precision.
 inline i32 tap(const opxy::i16* line, u32 mask, u32 position, u32 delay) {
     const u32 whole = delay >> 12;
     const i32 fraction = static_cast<i32>(delay & 4095u);
     const i32 a = line[(position - whole) & mask];
     const i32 b = line[(position - whole - 1u) & mask];
-    // Q15 endpoints and a Q12 fraction: the signed product fits 28 bits.
-    // Its Q31 contribution is an exact multiple of 16, so no Q31 multiply
-    // or rounding is needed. Unsigned shifts keep full-range endpoints defined.
-    return static_cast<i32>((static_cast<u32>(a) << 16) +
-                            (static_cast<u32>((b - a) * fraction) << 4));
+    return a + (b - a) * fraction / 4096;
 }
-
-inline i32 tap_whole(const opxy::i16* line, u32 mask, u32 position, u32 whole) {
-    return static_cast<i32>(line[(position - whole) & mask]) * 65536;
-}
-
-inline opxy::i16 store(i32 value) { return static_cast<opxy::i16>(value / 65536); }
 
 // Period in Q12 samples from a phase increment; one 32-bit division.
 inline u32 period_of(u32 increment) {
     u32 divisor = increment >> 8;
     if (divisor < 64) divisor = 64;
-    u32 period = (0xffffffffu / divisor) << 4;   // Q8 quotient, widened to Q12
+    u32 period = (0xffffffffu / divisor) << 2;   // quarter-rate period in Q12
     while (period > longest_period) period >>= 1;
     return period < shortest_period ? shortest_period : period;
 }
 
 // Bow one string for a block. `periods` holds four segment periods (Q12),
 // `bow` the per-sample bow velocity. Writes the wave arriving at the bridge.
-// This loop is the engine's cost: about 2 taps, 5 multiplies and a table
-// lookup per sample, with the string's state held in registers.
+// Two travelling-wave delay lines retain the nonlinear bow/string interaction.
+// Products stay within signed 32-bit bounds; audio and filter state are Q15.
+template <u32 Frames>
 inline void bow_string(String& s, i32* out, const i32* bow, const u32* periods, u32 position_q10,
                        const Bowing& b) {
     opxy::i16* const neck = s.neck;
@@ -138,11 +128,14 @@ inline void bow_string(String& s, i32* out, const i32* bow, const u32* periods, 
     i32 loss_1 = s.loss_1, loss_2 = s.loss_2;
     u32 neck_now = s.neck_delay, bridge_now = s.bridge_delay;
     const i32 side = b.side, centre = b.centre, slope = b.slope;
-    for (u32 part = 0; part < opxy::block_frames / segment; ++part) {
+    const bool steady = periods[0] == periods[1] && periods[0] == periods[2] && periods[0] == periods[3];
+    const u32 span = steady ? Frames : Frames / 4;
+    const u32 parts = steady ? 1u : 4u;
+    for (u32 part = 0; part < parts; ++part) {
         // Loop delay is neck + bridge + one sample for the symmetric loss filter.
         const u32 total = periods[part] - q12;
         // The bridge side takes whole samples; the neck carries the fraction,
-        // so one interpolated tap per sample keeps the tuning exact.
+        // so only the neck needs a fractional tap.
         u32 bridge_delay = ((total >> 10) * position_q10) & ~4095u;
         if (bridge_delay < q12) bridge_delay = q12;
         const u32 neck_delay = total - bridge_delay;
@@ -153,26 +146,25 @@ inline void bow_string(String& s, i32* out, const i32* bow, const u32* periods, 
         }
         bridge_now = bridge_delay;
         const u32 bridge_whole = bridge_delay >> 12;
-        const i32 neck_step = (static_cast<i32>(neck_delay) - static_cast<i32>(neck_now)) / static_cast<i32>(segment);
-        i32* const block = out + part * segment;
-        const i32* const push = bow + part * segment;
-        for (u32 n = 0; n < segment; ++n) {
+        const i32 change = static_cast<i32>(neck_delay) - static_cast<i32>(neck_now);
+        const i32 neck_step = steady ? change / static_cast<i32>(Frames) : change / static_cast<i32>(Frames / 4);
+        i32* const block = out + part * span;
+        const i32* const push = bow + part * span;
+        for (u32 n = 0; n < span; ++n) {
             neck_now = static_cast<u32>(static_cast<i32>(neck_now) + neck_step);
-            const i32 arriving = tap_whole(bridge, bridge_mask, at, bridge_whole);
-            const i32 lossy = multiply(side, add(arriving, loss_2)) + multiply(centre, loss_1);
+            const i32 arriving = bridge[(at - bridge_whole) & bridge_mask];
+            const i32 lossy = (side * (arriving + loss_2) + centre * loss_1) / 32768;
             loss_2 = loss_1;
             loss_1 = arriving;
             const i32 from_bridge = -lossy;
             const i32 from_nut = -tap(neck, neck_mask, at, neck_now);
-            const i32 slip = add(push[n], -add(from_bridge, from_nut));
-            // Friction: the string sticks to the wheel near zero slip, slides beyond.
-            const i32 scaled = multiply(magnitude(slip), slope);
-            // Nearest entry in a denser curve avoids interpolation per string sample.
-            const u32 index = (static_cast<u32>(scaled) + 131072u) >> 18;
-            const i32 friction = hg_bow[index < 1024 ? index : 1024];
-            const i32 injected = multiply(slip, friction);
-            neck[at & neck_mask] = store(add(from_bridge, injected));
-            bridge[at & bridge_mask] = store(add(from_nut, injected));
+            const i32 slip = clamp(push[n] - clamp(from_bridge + from_nut, -32767, 32767), -32767, 32767);
+            const u32 scaled = static_cast<u32>(magnitude(slip) * slope);
+            const u32 index = (scaled + 65536u) >> 17;
+            const i32 friction = hg_bow15[index < 1024 ? index : 1024];
+            const i32 injected = slip * friction / 32768;
+            neck[at & neck_mask] = static_cast<opxy::i16>(clamp(from_bridge + injected, -32767, 32767));
+            bridge[at & bridge_mask] = static_cast<opxy::i16>(clamp(from_nut + injected, -32767, 32767));
             ++at;
             block[n] = arriving;
         }
@@ -186,20 +178,46 @@ inline void bow_string(String& s, i32* out, const i32* bow, const u32* periods, 
     s.bridge_delay = bridge_now;
 }
 
+
+// Melody strings run at 22.05 kHz, then a seven-tap half-band filter
+// decimates to the 11.025 kHz mixing/body rate. No oscillator replacement.
+inline void melody_string(String& s, i32* out, const i32* bow, const u32* periods, u32 position, const Bowing& b) {
+    i32 faster_bow[32], samples[32];
+    u32 faster_periods[4];
+    for (u32 i = 0; i < 16; ++i) faster_bow[2*i] = faster_bow[2*i+1] = bow[i];
+    for (u32 i = 0; i < 4; ++i) faster_periods[i] = periods[i] * 2;
+    Bowing faster = b;
+    faster.side *= 4;
+    faster.centre = 31948 - faster.side - faster.side;
+    bow_string<32>(s, samples, faster_bow, faster_periods, position, faster);
+    u32 at = s.decimate_at;
+    for (u32 i = 0; i < 16; ++i) {
+        s.decimate[at & 7] = static_cast<opxy::i16>(samples[2*i]);
+        ++at;
+        s.decimate[at & 7] = static_cast<opxy::i16>(samples[2*i+1]);
+        const i32 value = (-1475 * (s.decimate[at & 7] + s.decimate[(at - 6) & 7])
+            + 9667 * (s.decimate[(at - 2) & 7] + s.decimate[(at - 4) & 7])
+            + 16384 * s.decimate[(at - 3) & 7]) / 32768;
+        out[i] = clamp(value, -32767, 32767) * 65536;
+        ++at;
+    }
+    s.decimate_at = at;
+}
+
 // ---- Drones and chien ----------------------------------------------------
 
 const i32 drone_bow_limit = 150323855;   // 0.07: keeps coup surges inside range
-const i32 coup_decay = 2146734613;       // 65 ms wrist-stroke envelope
+const i32 coup_decay = 2144489075;       // 65 ms wrist-stroke envelope
 const i32 note_coup_share = 858993459;   // coup 0..0.4: note-start strokes only
-const i32 rattle_b0 = 53262563;          // chien resonator, 2.2 kHz, Q 3 (halved)
-const i32 rattle_a1 = 1938869378;
-const i32 rattle_a2 = 967216698;
+const i32 rattle_b0 = 183390350;          // chien resonator, 2.2 kHz, Q 3 (halved)
+const i32 rattle_a1 = 543188326;
+const i32 rattle_a2 = 706961124;
 
 // Renders the drone block into shared.drone_block with this voice's controls.
 inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, bool stroke,
                          i32* bow, i32* work) {
     DroneSet& d = shared.drone;
-    const u32 bourdon = hg_bourdon_period[c.tonic];
+    const u32 bourdon = (hg_bourdon_period[c.tonic] / rate_factor);
     const u32 bourdon_periods[4] = { bourdon, bourdon, bourdon, bourdon };
     const u32 mouche = bourdon / 3u;     // a twelfth above: just fifth, no beating
     const u32 mouche_periods[4] = { mouche, mouche, mouche, mouche };
@@ -225,34 +243,43 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
         d.coup_phase = 0;
     }
 
-    // Bourdon and mouche share one bow speed.
-    for (u32 i = 0; i < opxy::block_frames; ++i) {
-        d.bow[0] += (b.speed - d.bow[0]) / 1024;
-        const i32 rough = roughen(d.random, d.noise);
-        bow[i] = d.bow[0] + multiply(d.bow[0], multiply(rough, b.roughness) * 4);
-    }
     i32 level = d.level;
-    bow_string(d.bourdon, work, bow, bourdon_periods, drone_position, b);
-    for (u32 i = 0; i < opxy::block_frames; ++i) {
-        level += (level_target - level) / 256;
-        shared.drone_block[i] = multiply(work[i], multiply(level, 1610612736));      // 0.75
-    }
-    bow_string(d.mouche, work, bow, mouche_periods, drone_position, b);
-    level = d.level;
-    for (u32 i = 0; i < opxy::block_frames; ++i) {
-        level += (level_target - level) / 256;
-        shared.drone_block[i] += multiply(work[i], multiply(level, 1181116006));      // 0.55
+    if (level_target == 0 && d.level < 64) d.level = level = 0;
+    const bool tonal = level_target > 0 || d.level > 0;
+    if (tonal) {
+        // Bourdon and mouche share one bow speed.
+        for (u32 i = 0; i < render_frames; ++i) {
+            d.bow[0] += (b.speed - d.bow[0]) / 256;
+            const i32 rough = roughen(d.random, d.noise);
+            const i32 speed = d.bow[0] / 65536;
+            bow[i] = speed + speed * (rough * b.roughness / 8192) / 32768;
+        }
+        level = d.level;
+        bow_string<render_frames>(d.bourdon, work, bow, bourdon_periods, drone_position, b);
+        for (u32 i = 0; i < render_frames; ++i) {
+            level += (level_target - level) / 64;
+            shared.drone_block[i] = work[i] * ((level / 65536) * 3 / 4) / 32768;      // 0.75
+        }
+        bow_string<render_frames>(d.mouche, work, bow, mouche_periods, drone_position, b);
+        level = d.level;
+        for (u32 i = 0; i < render_frames; ++i) {
+            level += (level_target - level) / 64;
+            shared.drone_block[i] += work[i] * ((level / 65536) * 18022 / 32768) / 32768;      // 0.55
+        }
+    } else {
+        for (u32 i = 0; i < render_frames; ++i) shared.drone_block[i] = 0;
     }
 
     // Trompette: the current coup surges its bow speed (held for the block).
     const i32 surge = 1073741824 + multiply(d.coup, 966367642);   // 1 .. 1.9, halved
-    for (u32 i = 0; i < opxy::block_frames; ++i) {
-        d.bow[2] += (b.speed - d.bow[2]) / 1024;
+    for (u32 i = 0; i < render_frames; ++i) {
+        d.bow[2] += (b.speed - d.bow[2]) / 256;
         const i32 pushed = clamp(multiply(d.bow[2], surge) * 2, 0, drone_bow_limit);
         const i32 rough = roughen(d.random, d.noise);
-        bow[i] = pushed + multiply(pushed, multiply(rough, b.roughness) * 4);
+        const i32 speed = pushed / 65536;
+        bow[i] = speed + speed * (rough * b.roughness / 8192) / 32768;
     }
-    bow_string(d.trompette, work, bow, trompette_periods, drone_position, b);
+    bow_string<render_frames>(d.trompette, work, bow, trompette_periods, drone_position, b);
 
     // Chien: the trompette lifts its buzzing bridge when the wheel is stroked
     // (a coup) and, above half Buzz, all the time. Impacts come from the peak
@@ -264,37 +291,37 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
         : add(buzz_target - 966367642, buzz_target - 966367642);
     const i32 sensitivity = buzz_target >= 858993459 ? maximum : buzz_target + buzz_target + buzz_target / 2;
     level = d.level;
-    for (u32 i = 0; i < opxy::block_frames; ++i) {
-        level += (level_target - level) / 256;
-        buzz += (buzz_target - buzz) / 256;
+    for (u32 i = 0; i < render_frames; ++i) {
+        level += (level_target - level) / 64;
+        buzz += (buzz_target - buzz) / 64;
         if (rate) {
             const u32 before = d.coup_phase;
-            d.coup_phase += rate;
+            d.coup_phase += rate * rate_factor;
             if (d.coup_phase < before && d.coup < 1717986918) d.coup = 1717986918;  // 0.8
         }
         d.coup = multiply(d.coup, coup_decay);
         const i32 t = work[i];
-        i32 out = multiply(t, multiply(level, 1073741824));                          // 0.50
+        i32 out = t * (level / 131072) / 32768;                          // 0.50
         if (chien) {
             const i32 lift_target = add(steady, multiply(d.coup, sensitivity));
-            d.lift += (lift_target - d.lift) / 32;
-            d.envelope += (magnitude(t) - d.envelope) / 64;
+            d.lift += (lift_target - d.lift) / 8;
+            d.envelope += (magnitude(t) - d.envelope) / 16;
             i32 peak = t - d.envelope / 2;
             if (peak < 0) peak = 0;
             const i32 impact = peak - d.rectified;
             d.rectified = peak;
             const i32 rough = roughen(d.random, d.noise);
-            const i32 jagged = add(impact, multiply(impact, add(rough, rough)));
-            const i32 rattle = (multiply(rattle_b0, jagged) + multiply(rattle_a1, d.rattle_1)
-                                - multiply(rattle_a2, d.rattle_2)) * 2;
+            const i32 jagged = clamp(impact + impact * (rough * 2) / 32768, -32767, 32767);
+            const i32 rattle = clamp(((rattle_b0 / 131072) * jagged + (rattle_a1 / 131072) * d.rattle_1
+                                - (rattle_a2 / 131072) * d.rattle_2) / 8192, -32767, 32767);
             d.rattle_2 = d.rattle_1;
             d.rattle_1 = rattle;
             // The rasp is loud on a real gurdy: lift the resonator 30 dB.
             const i32 loudness = 1073741824 + buzz / 2;                  // 0.5 .. 1 with Buzz
-            const i32 chatter = clamp(multiply(multiply(rattle, d.lift), loudness), -13421772, 13421772);
-            out = add(out, chatter * 16);                                   // peak 0.1
+            const i32 chatter = clamp((rattle * (d.lift / 65536) / 32768) * (loudness / 65536) / 32768, -204, 204);
+            out += chatter * 16;                                   // peak 0.1
         }
-        shared.drone_block[i] = add(shared.drone_block[i], out);
+        shared.drone_block[i] = clamp(shared.drone_block[i] + out, -32767, 32767) * 65536;
     }
     d.level = level;
     d.buzz = buzz;
@@ -302,7 +329,7 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
 
 // ---- Soundbox and output ----------------------------------------------
 
-const i32 dc_pole = 2141373067;       // 20 Hz
+const i32 dc_pole = 2123145451;       // 20 Hz
 const i32 output_limit = 644245094;   // 0.3: the declared peak, under the half-scale ceiling
 
 // Output gain from the measured Wheel x Rosin loudness grid (Q29), so the two
@@ -336,45 +363,46 @@ inline void soundbox(Voice& voice, Shared& shared, i32* signal, const Controls& 
         const i32 g2 = 687194767 + multiply(body, 343597384);
         shared.body_direct = 1181116006 - multiply(body, 322122547);      // 0.55 .. 0.40
         // Fold each mode's gain into its input coefficient: three fewer multiplies
-        // per sample, same response (the resonators are linear).
+        // per sample. Quantize the resulting coefficients to Q13 for bounded
+        // 32-bit sums with the Q15 resonator state.
         k[0] = multiply(k[0], g0);
         k[3] = multiply(k[3], g1);
         k[6] = multiply(k[6], g2);
+        for (u32 j = 0; j < 9; ++j) k[j] /= 131072;
+        shared.body_direct /= 65536;
         shared.body_key = body_key;
     }
     const u32 wheel_key = static_cast<u32>(c.wheel) + 1u;
     const u32 rosin_key = static_cast<u32>(c.rosin) + 1u;
     if (shared.level_wheel_key != wheel_key || shared.level_rosin_key != rosin_key) {
-        shared.output_gain = level_of(c);
+        shared.output_gain = level_of(c) / 262144;
         shared.level_wheel_key = wheel_key;
         shared.level_rosin_key = rosin_key;
     }
+    // Q15 signal/state, Q13 mode coefficients and output gain. The largest
+    // absolute coefficient sum is below 32768, so these products fit i32.
     const i32 direct = shared.body_direct, level = shared.output_gain;
     i32 in_1 = voice.body_1, in_2 = voice.body_2;
     i32 a1 = voice.mode_1[0], a2 = voice.mode_2[0];
     i32 n1 = voice.mode_1[1], n2 = voice.mode_2[1];
     i32 e1 = voice.mode_1[2], e2 = voice.mode_2[2];
     i32 dc_in = voice.dc_in, dc_out = voice.dc_out;
-    for (u32 i = 0; i < opxy::block_frames; ++i) {
-        const i32 in = signal[i] / 2;                          // headroom for the resonances
-        const i32 difference = in - in_2; // both are half-scale; subtraction fits
-        i32 half = add(multiply(k[0], difference), add(multiply(k[1], a1), -multiply(k[2], a2)));
-        a2 = a1; a1 = add(half, half);
-        half = add(multiply(k[3], difference), add(multiply(k[4], n1), -multiply(k[5], n2)));
-        n2 = n1; n1 = add(half, half);
-        half = add(multiply(k[6], difference), add(multiply(k[7], e1), -multiply(k[8], e2)));
-        e2 = e1; e1 = add(half, half);
+    for (u32 i = 0; i < render_frames; ++i) {
+        const i32 in = signal[i] / 131072;
+        const i32 difference = in - in_2;
+        i32 mode = clamp((k[0] * difference + k[1] * a1 - k[2] * a2) / 8192, -32767, 32767);
+        a2 = a1; a1 = mode;
+        mode = clamp((k[3] * difference + k[4] * n1 - k[5] * n2) / 8192, -32767, 32767);
+        n2 = n1; n1 = mode;
+        mode = clamp((k[6] * difference + k[7] * e1 - k[8] * e2) / 8192, -32767, 32767);
+        e2 = e1; e1 = mode;
         in_2 = in_1; in_1 = in;
-        const i32 shaped = add(add(multiply(in, direct), a1), add(n1, e1));
-        dc_out = add(add(shaped, -dc_in), multiply(dc_out, dc_pole));
+        const i32 shaped = clamp(in * direct / 32768 + a1 + n1 + e1, -32767, 32767);
+        dc_out = clamp(shaped - dc_in + dc_out * (dc_pole / 65536) / 32768, -32767, 32767);
         dc_in = shaped;
-        // Stock-like loudness: typical peaks near 0.22, like Macro Osc.
-        i32 out = multiply(dc_out, level);                     // x level / 4
-        // The final 0.3 ceiling subsumes all three saturating doublings.
-        // Bound before multiplying so the exact in-range result cannot overflow.
-        signal[i] = out > output_limit / 8 ? output_limit
-            : out < -output_limit / 8 ? -output_limit : out * 8;
+        signal[i] = clamp(dc_out * level / 1024, -9830, 9830) * 65536;
     }
+
     voice.body_1 = in_1; voice.body_2 = in_2;
     voice.mode_1[0] = a1; voice.mode_2[0] = a2;
     voice.mode_1[1] = n1; voice.mode_2[1] = n2;
@@ -382,7 +410,7 @@ inline void soundbox(Voice& voice, Shared& shared, i32* signal, const Controls& 
     voice.dc_in = dc_in; voice.dc_out = dc_out;
 }
 
-const i32 click_decay = 2131312914;   // 3 ms
+const i32 click_decay = 1323854692; // 3 ms, one device block
 
 }  // namespace
 
@@ -391,6 +419,7 @@ void initialize(Voice& voice, Shared& shared, u32 owner) {
     voice.random = owner * 2654435761u + 12345u;
     voice.drone_gain = 0;
     voice.drone_serial = shared.drone_serial;
+    voice.output_previous = 0;
     voice.pitch_period = 0; // zero is not a valid cached period
     start(voice, shared, owner);
 }
@@ -413,7 +442,7 @@ void destroy(Voice& voice, Shared& shared, u32 owner) {
     voice.drone_gain = 0;
 }
 
-void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
+static void render_internal(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
             opxy::Parameters parameters, opxy::Pitch pitch) {
     const Controls c(parameters);
 
@@ -432,37 +461,39 @@ void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
     MelodySlot* slot = shared.melody.get(owner, voice.slot);
     if (!slot && !owns && voice.drone_gain == 0) {
         // Strings lent to a newer note and no drones to hand over: no work.
-        for (u32 i = 0; i < opxy::block_frames; ++i) output[i] = 0;
+        voice.output_previous = 0;
+        for (u32 i = 0; i < render_frames; ++i) output[i] = 0;
         return;
     }
 
     const Bowing b(c);
-    i32 bow[opxy::block_frames];
-    i32 work[opxy::block_frames];
+    i32 bow[render_frames];
+    i32 work[render_frames];
 
     // ---- Melody strings ----
     if (slot) {
-        for (u32 i = 0; i < opxy::block_frames; ++i) {
-            voice.bow += (b.speed - voice.bow) / 512;   // the wheel bites over ~12 ms
+        for (u32 i = 0; i < render_frames; ++i) {
+            voice.bow += (b.speed - voice.bow) / 128;   // the wheel bites over ~12 ms
             const i32 rough = roughen(voice.random, voice.noise);
-            bow[i] = voice.bow + multiply(voice.bow, multiply(rough, b.roughness) * 4);
+            const i32 speed = voice.bow / 65536;
+            bow[i] = speed + speed * (rough * b.roughness / 8192) / 32768;
         }
         u32 periods[4];
         for (u32 part = 0; part < 4; ++part) {
-            const u32 increment = pitch[part * segment];
+            const u32 increment = pitch[part * segment * rate_factor];
             if (!voice.pitch_period || increment != voice.pitch_increment) {
                 voice.pitch_increment = increment;
                 voice.pitch_period = period_of(increment);
             }
             periods[part] = voice.pitch_period;
         }
-        bow_string(slot->main, output, bow, periods, main_position, b);
+        melody_string(slot->main, output, bow, periods, main_position, b);
         // The twin joins fully by 12% Unison; above that the knob only detunes.
         const i32 twin_target = c.unison <= 21474836 ? 0
             : multiply(c.unison >= 268435456 ? maximum : c.unison * 8, 1825361101);  // up to 0.85
-        // Integer smoothing stalls at 1..255. End that inaudible tail so an
+        // Integer smoothing stalls at 1..63. End that inaudible tail so an
         // unison string switched off does not consume CPU for the whole note.
-        if (twin_target == 0 && voice.twin_gain < 256) voice.twin_gain = 0;
+        if (twin_target == 0 && voice.twin_gain < 64) voice.twin_gain = 0;
         if (twin_target > 0 || voice.twin_gain > 0) {
             const i32 ratio = lookup33(hg_twin_ratio, c.unison);
             u32 twin_periods[4];
@@ -470,38 +501,43 @@ void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
                 u32 period = static_cast<u32>(multiply(static_cast<i32>(periods[part]), ratio));
                 twin_periods[part] = period < shortest_period ? shortest_period : period;
             }
-            bow_string(slot->twin, work, bow, twin_periods, twin_position, b);
-            if ((twin_target - voice.twin_gain) / 256 == 0) {
+            melody_string(slot->twin, work, bow, twin_periods, twin_position, b);
+            if ((twin_target - voice.twin_gain) / 64 == 0) {
                 // Once integer smoothing has settled, these are block constants.
                 const i32 gain = voice.twin_gain;
                 const i32 attenuation = static_cast<i32>(static_cast<u32>(gain) / 3u);
-                for (u32 i = 0; i < opxy::block_frames; ++i) {
-                    const i32 together = add(output[i], multiply(work[i], gain));
-                    output[i] = together - multiply(together, attenuation);
+                for (u32 i = 0; i < render_frames; ++i) {
+                    const i32 together = clamp(output[i] / 65536 + (work[i] / 65536) * (gain / 65536) / 32768, -32767, 32767);
+                    output[i] = (together - together * (attenuation / 65536) / 32768) * 65536;
                 }
             } else {
-                for (u32 i = 0; i < opxy::block_frames; ++i) {
-                    voice.twin_gain += (twin_target - voice.twin_gain) / 256;
-                    const i32 together = add(output[i], multiply(work[i], voice.twin_gain));
+                for (u32 i = 0; i < render_frames; ++i) {
+                    voice.twin_gain += (twin_target - voice.twin_gain) / 64;
+                    const i32 together = clamp(output[i] / 65536 + (work[i] / 65536) * (voice.twin_gain / 65536) / 32768, -32767, 32767);
                     // The gain is nonnegative. Unsigned division by three uses
                     // constant arithmetic on Blackfin instead of a runtime helper.
                     const i32 attenuation = static_cast<i32>(static_cast<u32>(voice.twin_gain) / 3u);
-                    output[i] = together - multiply(together, attenuation);
+                    output[i] = (together - together * (attenuation / 65536) / 32768) * 65536;
                 }
             }
         }
         // Key tangent: a short knock as the key meets the string.
         if (voice.click) {
-            for (u32 i = 0; i < opxy::block_frames; ++i) {
+            const i32 next = multiply(voice.click, click_decay);
+            const i32 step = (next - voice.click) / static_cast<i32>(render_frames);
+            for (u32 i = 0; i < render_frames; ++i) {
                 voice.random = voice.random * 1664525u + 1013904223u;
-                output[i] = add(output[i], multiply(static_cast<i32>(voice.random) / 4, voice.click));
-                voice.click = multiply(voice.click, click_decay);
+                const i32 impulse = (static_cast<i32>(voice.random) / 262144)
+                    * (voice.click / 65536) / 32768;
+                output[i] = clamp(output[i] / 65536 + impulse, -32767, 32767) * 65536;
+                voice.click += step;
             }
-            if (voice.click < 2048) voice.click = 0;
+            voice.click = next < 2048 ? 0 : next;
         }
+
     } else {
         // The pool lent this voice's strings to a newer note: silent until restruck.
-        for (u32 i = 0; i < opxy::block_frames; ++i) output[i] = 0;
+        for (u32 i = 0; i < render_frames; ++i) output[i] = 0;
     }
 
     // ---- Drones: rendered once per block by their owner, faded in and out ----
@@ -514,15 +550,34 @@ void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
     voice.drone_serial = shared.drone_serial;
     const i32 drone_target = owns ? maximum : 0;
     if (drone_target > 0 || voice.drone_gain > 0) {
-        for (u32 i = 0; i < opxy::block_frames; ++i) {
+        for (u32 i = 0; i < render_frames; ++i) {
             voice.drone_gain += drone_target > voice.drone_gain
-                ? (voice.drone_gain < maximum - 4869970 ? 4869970 : maximum - voice.drone_gain)  // 10 ms
-                : (voice.drone_gain > 4869970 ? -4869970 : -voice.drone_gain);
-            if (fresh) output[i] = add(output[i], multiply(shared.drone_block[i], voice.drone_gain));
+                ? (voice.drone_gain < maximum - 19479880 ? 19479880 : maximum - voice.drone_gain)  // 10 ms
+                : (voice.drone_gain > 19479880 ? -19479880 : -voice.drone_gain);
+            if (fresh) output[i] = clamp(output[i] / 65536
+                + (shared.drone_block[i] / 65536) * (voice.drone_gain / 65536) / 32768,
+                -32767, 32767) * 65536;
         }
     }
 
     soundbox(voice, shared, output, c);
+}
+
+// Interpolate the mixed/body output back to the device's 44.1 kHz rate.
+void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
+            opxy::Parameters parameters, opxy::Pitch pitch) {
+    i32 low[render_frames];
+    render_internal(voice, shared, owner, low, parameters, pitch);
+    i32 previous = voice.output_previous;
+    for (u32 i = 0; i < render_frames; ++i) {
+        const i32 difference = low[i] - previous;
+        output[4*i] = previous + difference / 4;
+        output[4*i+1] = previous + difference / 2;
+        output[4*i+2] = low[i] - difference / 4;
+        output[4*i+3] = low[i];
+        previous = low[i];
+    }
+    voice.output_previous = previous;
 }
 
 }  // namespace hurdygurdy

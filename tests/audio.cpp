@@ -21,7 +21,7 @@ int main() {
         voice = Voice{};
         for (unsigned p = 0; p < 7; ++p)
             parameters[p] = (setting & (1u << p)) ? 2147483647 : 0;
-        parameters[7] = static_cast<opxy::i32>((setting % 12) * 178956970u);
+        parameters[7] = static_cast<opxy::i32>((2ull * (setting % 12) + 1) * 2147483647ull / 24);
         initialize(voice, shared, 1);
         for (unsigned block = 0; block < 160; ++block) {
             for (unsigned i = 0; i < 64; ++i)

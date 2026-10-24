@@ -8,8 +8,8 @@ int main() {
         line[1] = a;
         line[0] = b;
         for (opxy::u32 fraction = 0; fraction < 4096; ++fraction) {
-            const opxy::i64 expected = static_cast<opxy::i64>(a) * 65536 +
-                (static_cast<opxy::i64>(b) - a) * fraction * 16;
+            const opxy::i64 expected = static_cast<opxy::i64>(a) +
+                (static_cast<opxy::i64>(b) - a) * fraction / 4096;
             const opxy::i32 actual = hurdygurdy::tap(line, 3, 2, 4096 + fraction);
             if (actual != expected) {
                 std::fprintf(stderr, "Fractional delay mismatch at %d, %d, %u\n", a, b, fraction);

@@ -66,85 +66,64 @@ changes and multiple tracks. Establish whether global drones across tracks are
 the desired musical behavior before changing that design. This is outstanding;
 the migration does not claim to fix it.
 
-### 2. CPU qualification and optimization (high)
+### 2. CPU qualification and optimization
 
-SDK host estimates in this session ranged approximately 121k–167k equivalent
-Blackfin instructions per voice block, above the SDK's 15k aim/24k warning.
-These are calibration-based host estimates, not disassembly instruction counts,
-device cycles or evidence of a specific safe polyphony. Host compiler behavior,
-load, shared drones and persistent state affect the estimate. The SDK sweep
-changes one control at a time and does not establish the combined maximum.
+The current implementation retains both travelling-wave delay lines and the
+nonlinear bow for every string. Melody and Unison run at 22.05 kHz; the three
+drones, chien and body run at 11.025 kHz. A seven-tap half-band filter precedes
+melody decimation, and the final output is interpolated to 44.1 kHz. Resonator
+poles and envelope decays are retuned by `generators/rates.py`, using the
+original coefficients preserved in `generators/filter_reference.json`.
 
-The additional benchmark uses fresh state per repeat, warms up for 1,200
-blocks, times 2,000 blocks and reports the best of five repetitions. These
-Windows LLVM-MinGW Clang `-O2` timings are nanoseconds per complete group of
-voices at 440 Hz, including one shared drone set when enabled:
+Audio, resonator state and gain mixing use Q15 with bounded 32-bit products;
+control envelopes retain Q31 precision. Unchanged body/level coefficients and
+pitch conversions are cached. The key-click envelope is evaluated once per
+block and interpolated. When Drone fades to zero, bourdon and mouche pause;
+trompette continues to excite Buzz. All eight controls and three body modes
+remain. These changes intentionally alter the sound and bandwidth.
 
-| Setting | Original, 1 voice | Migrated, 1 voice | Original, 8 voices | Migrated, 8 voices |
-| --- | ---: | ---: | ---: | ---: |
-| Melody | 2,439 | 2,476 | 20,898 | 21,939 |
-| Unison | 3,344 | 3,415 | 32,869 | 30,640 |
-| Drones + buzz + coup | 6,527 | 7,306 | 24,763 | 25,418 |
-| All features | 8,564 | 8,513 | 37,143 | 38,120 |
-| Unison off after on | 3,362 | 2,555 | 32,239 | 23,938 |
+Current host results, with the same SDK reference loop and Clang `-O2`:
 
-The last row improves about 24% for one voice and 26% for eight voices.
-Other differences are not claimed as improvements; this is a single before/
-after session with host noise. It does not establish native speedup percentages.
+| Probe | Highest sampled instruction equivalents per 64-sample block |
+| --- | ---: |
+| Ordinary SDK one-control-at-a-time sweep | about 12,400 |
+| Expanded 2,816-case sustained/render sweep | 18,728 |
+| 384 repeated fresh-note cases, including initialization, render and destruction | 19,192 |
 
-Completed quick optimizations after commit `0e343c8`:
+`benchmarks/corners.cpp` supplies the portable expanded sweep: all 128
+continuous-control corners, eight pitch inputs including numeric extremes,
+steady and changing segment pitches, and all twelve tonics in four heavy
+combinations. Each setting uses seven 2,048-block measurements after 256
+warmup blocks, with fresh state per repetition. The smallest time per setting
+is used, then the largest across settings. These are sampled cases, not an
+exhaustive worst-case proof over all continuous controls and histories.
 
-- Cache repeated pitch conversions and unchanged body/level coefficients.
-- Interpolate Q15 delay words directly; simplify bounded soundbox arithmetic.
-- Move settled Unison gain work outside the sample loop and use unsigned
-  constant division during fades. Native assembly no longer calls the signed
-  division helper that previously ran 64 times per Unison voice block.
-- Replace interpolated 257-entry bow friction with a nearest-entry 1,025-entry
-  curve. Its coefficient error stays below 0.008 against the documented model.
-  This deliberately permits sound differences. Caches add 1,080 state bytes
-  across the declared capacity; the denser table adds 3,072 constant bytes.
+Wall-time measurements were affected by host scheduling, so the expanded and
+onset results also used a temporary SDK-local Windows clock adapter calling
+[QueryThreadCycleTime](https://learn.microsoft.com/en-us/windows/win32/api/realtimeapiset/nf-realtimeapiset-querythreadcycletime).
+No Windows code enters the machine. It counts the host thread's CPU cycles;
+they are not Blackfin cycles. Divide by the same reference's host cycles and
+multiply by its 590 Blackfin instructions. Using the smaller calibration
+before/after each sweep gives the conservative figures above: render peak
+5,499.8 cycles / 173.266 * 590, onset peak 5,642.3 / 173.453 * 590.
+No conversion from these counters to elapsed seconds is assumed.
 
-Five interleaved before/after sweeps (median of each sweep's best-of-five
-measurement, same host compiler) gave these nanoseconds per group block:
-
-| Setting | Before, 1 voice | Optimized, 1 voice | Before, 8 voices | Optimized, 8 voices |
-| --- | ---: | ---: | ---: | ---: |
-| Melody | 2,182 | 1,934 | 18,351 | 15,765 |
-| Unison | 3,103 | 2,683 | 26,368 | 22,031 |
-| Drones + buzz + coup | 5,987 | 5,198 | 23,100 | 20,082 |
-| All features | 7,228 | 5,999 | 31,110 | 27,317 |
-
-These host results improve roughly 11-17%; they are not device cycle savings.
-A nearby FM2op sweep took 889 ns per voice block, so FM parity is not achieved.
-Native timing remains necessary to quantify the division-helper savings.
-
-Two-second sustained renders of all twelve presets changed RMS by at most
-2.13 dB and energy-weighted spectral centroid by at most 21.4% against
-`0e343c8`. Five isolated melody pitches from 110 to 1,760 Hz retained the same
-FFT peak bins (about 0.5 Hz resolution). This is a limited characterization,
-not a perceptual or exhaustive tuning qualification; audition the preview.
-
-Next optimization candidates:
-- Avoid bowing inaudible bourdon/mouche strings when only Buzz needs the
-  trompette. Define how dormant strings resume before changing this behavior.
-- Review note-start clearing of a 4.6 KiB melody slot, especially simultaneous
-  notes. Steady-state render timing omits that burst.
-- Profile native generated code, stack and memory traffic before rewriting
-  multiply loops. Existing constant power-of-two division is not equivalent
-  to expensive variable division; preserve signed rounding when optimizing.
-
-Measure sustained and retriggered 1/4/8-note loads, all features, heavy stock
-effects, parameter locks and multiple tracks on a device in a separately
-authorized session. Listen for dropouts and assess GUI responsiveness together.
+The tested host estimates meet the requested sub-20k target. Device timing,
+stock effects, display contention and real multi-track scheduling still need
+qualification. No device operations were performed. The separate drone-owner
+ordering bug above remains unresolved.
 
 ### 3. Sound and lifecycle qualification (medium/high)
 
 The new audio test covers 128 continuous-control corners, varying tonic,
 zero/maximum/modulated pitch, declared output peak, unison shutdown and stolen
-lease safety. Five test programs pass undefined-behavior sanitization.
+lease safety. Seven test programs pass undefined-behavior sanitization.
 Preset tests additionally exercise eight voices, mixed controls, retriggers
 and automation across all twelve presets; friction and interpolation have
-separate numeric checks.
+separate numeric checks. The sustained-tuning test checks 81 combinations
+of nine notes (110-1,760 Hz), three Wheel values and three Rosin values. Its
+acceptance bound is eight cents; the largest measured deviation is six cents.
+Drone idle/resume tests cover silence, fading and restarting while Buzz stays on.
 This is useful coverage, not proof over every state trajectory.
 
 Still needed: listening review of all presets, pitch measurement over the
@@ -189,12 +168,16 @@ Planning estimates, assuming SDK familiarity and access to the original author:
 | Display review and device stress session | 0.5–1 day plus device access |
 | Licensing and catalog release | External dependency; no reliable elapsed-time estimate |
 
-## Validation record
+## Initial migration validation record
+
+The following package results describe the initial SDK 1.0 migration. Current
+optimization coverage and timing are recorded above; each generated package
+requires a fresh native build and full release verification.
 
 - SDK public `python sdk.py check`: passed, 143 Python tests in each normal
   and `-O` run; public mode explicitly skips 17 private-fixture tests.
 - Pinned-SDK `sdk.py test --machine ...`: preview ABI/lifecycle/drawing smoke
-  checks and both machine tests passed. CPU warning remains.
+  checks and both original machine tests passed.
 - Clang undefined-behavior sanitizer: audio and display tests passed.
 - Display equivalence probe: identical node/path-geometry checksum across
   1,000 varied frames before/after; parameter and preset definitions unchanged.
