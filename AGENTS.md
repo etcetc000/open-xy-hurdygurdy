@@ -17,4 +17,5 @@ outside every checkout. No device operations without a separate instruction.
 Run commands without a PTY. Never open a terminal window; explicitly launch
 background helpers hidden, and use CREATE_NO_WINDOW for Python subprocesses.
 
-Source licensing is unresolved; see PROVENANCE.md. Do not invent a license.
+Distribution permission is recorded in LICENSE; see PROVENANCE.md for source
+attribution. Do not invent or broaden license terms.

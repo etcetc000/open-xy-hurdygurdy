@@ -3,7 +3,8 @@
 A standalone Open-XY SDK 1.0 migration of Hurdy Gurdy by
 [SammiBabe666](https://github.com/SammiBabe666), the original instrument author.
 See [AUDIT.md](AUDIT.md) for scope, findings and validation, and
-[PROVENANCE.md](PROVENANCE.md) for source and unresolved licensing.
+[PROVENANCE.md](PROVENANCE.md) for source attribution and [LICENSE](LICENSE)
+for the recorded distribution permission.
 CI pins SDK commit `e8fc2a13bca715079f722df5a23426fac6b8f30b`.
 
 A bowed-string synth. Each note bows a melody string (the chanterelle) with a

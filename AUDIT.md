@@ -10,8 +10,9 @@ The interface migration is small. This is already a portable, fixed-point
 SDK synth with separate audio/display callbacks, bounded delay storage and
 eight shared melody leases. A rewrite is unnecessary. Release readiness is
 a larger task: shared-drone ownership has a reproducible ordering bug, CPU
-needs device qualification, musical behavior still needs listening qualification, and the
-archive supplies no redistribution license.
+needs device qualification and musical behavior still needs listening qualification.
+The repository owner has confirmed permission for public source publication
+and catalog distribution; see [LICENSE](LICENSE).
 
 The author did consider optimization: Q15 delay storage, only one fractional
 delay tap per string sample, four pitch divisions per block, per-block body
@@ -143,11 +144,14 @@ unmeasured. The two straight-segment melody shapes contain many collinear and
 retraced points; reducing geometry may help, but the shared 64-point frame
 budget and rim path require coordinated C++/SVG changes and visual comparison.
 
-### 5. Release and distribution (blocking for publication)
+### 5. Release and distribution
 
-No license or author notice was supplied. Confirm ownership/redistribution
-terms, including any STK-derived content, before public release/catalog entry.
-The repository is private for audit and development; it is not a release.
+The original instrument author is [SammiBabe666](https://github.com/SammiBabe666).
+No license or author notice was supplied in the original archive. On 2026-10-24,
+the repository owner confirmed permission to publish the source and distribute
+the machine through the Open-XY catalog. That permission is recorded in
+[LICENSE](LICENSE); it does not assign a general-purpose open-source license.
+The original archive's missing table provenance remains documented above.
 
 Retain `hurdygurdy` and all parameter slot meanings. Presets identify the name;
 projects identify numeric engine assignments. Importing an old hardcoded-ID
@@ -166,7 +170,7 @@ Planning estimates, assuming SDK familiarity and access to the original author:
 | Sound/preset/tuning reference tests | 1–2 days |
 | CPU profiling and selected optimizations | 1–3 days, depending on measured bottleneck |
 | Display review and device stress session | 0.5–1 day plus device access |
-| Licensing and catalog release | External dependency; no reliable elapsed-time estimate |
+| Catalog release | Publication permission confirmed; release pinned in the catalog submission |
 
 ## Initial migration validation record
 
