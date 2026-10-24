@@ -1,4 +1,5 @@
 #include "engine.cpp"
+#include "strings.cpp"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
