@@ -166,7 +166,18 @@ Planning estimates, assuming SDK familiarity and access to the original author:
 - Pinned-SDK `sdk.py test --machine ...`: preview ABI/lifecycle/drawing smoke
   checks and both machine tests passed. CPU warning remains.
 - Clang undefined-behavior sanitizer: audio and display tests passed.
-- Native build and full private-fixture verification: recorded below when complete.
+- Display equivalence probe: identical node/path-geometry checksum across
+  1,000 varied frames before/after; parameter and preset definitions unchanged.
+- Native build: passed, including independent reconstruction, exact edits and
+  entry preservation. The full bundled collection plus Hurdy Gurdy allocates
+  577,888 bytes of the shared module region. Layout assigns Hurdy Gurdy 36/84.
+- Full private-fixture verification: passed. Independent native source rebuild
+  matched; all 143 Python tests passed in both normal Python and `python -O`
+  with no skipped fixtures, and the browser test suite passed.
+- GitHub Actions run [40123051493](https://github.com/etcetc000/open-xy-hurdygurdy/actions/runs/40123051493):
+  neither job started; GitHub reports failed account payments or a spending
+  limit requiring adjustment. This is an account block, not a test failure.
+  Hosted CI remains unverified until that is resolved and the workflow rerun.
 - No device operations, hardware timing, recovery test or listening approval.
 
 The active SDK checkout was edited concurrently by another task during an
