@@ -1,4 +1,4 @@
-#include "strings.h"
+#include "bowed_string.h"
 #include "tables.h"
 
 namespace hurdygurdy {

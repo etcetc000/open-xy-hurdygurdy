@@ -1,5 +1,5 @@
 #include "core.h"
-#include "strings.h"
+#include "bowed_string.h"
 #include <opxy/q31.hpp>
 #include "tables.h"
 

@@ -45,7 +45,7 @@ python ../open-xy/sdk.py check
 | --- | --- |
 | [definition.json](definition.json) | Controls, presets, resources and the drawing shape |
 | [core.h](core.h), [engine.cpp](engine.cpp) | String, drone and voice state; mixing, chien, soundbox |
-| [strings.h](strings.h), [strings.cpp](strings.cpp) | Shared bowed-string solver with settled-delay and moving-delay paths |
+| [bowed_string.h](bowed_string.h), [strings.cpp](strings.cpp) | Shared bowed-string solver with settled-delay and moving-delay paths |
 | [tables.h](tables.h) | Friction curve, drone periods, soundbox modes, coup rates, unison ratios, loudness grid, display sine |
 | [display.h](display.h), [display.cpp](display.cpp), [panel.svg.fragment](panel.svg.fragment) | The screen |
 | [machine.json](machine.json) | SDK version, kind, requested identity (engine 36, page 84) and icon |
