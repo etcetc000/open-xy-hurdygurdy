@@ -1,0 +1,49 @@
+name: Machine checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+env:
+  SDK_REF: e8fc2a13bca715079f722df5a23426fac6b8f30b
+jobs:
+  preview-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: machine
+      - uses: actions/checkout@v4
+        with:
+          repository: etcetc000/open-xy
+          ref: ${{ env.SDK_REF }}
+          path: sdk
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get update && sudo apt-get install -y clang lld
+      - run: python -m pip install numpy==2.3.5
+      - run: python sdk/sdk.py test --machine machine --cxx clang++ --host-cxx g++
+      - name: Undefined behavior checks
+        run: |
+          for source in machine/tests/*.cpp; do
+            clang++ -std=c++11 -O1 -fsanitize=undefined -fno-sanitize-recover=all -Isdk/sdk/include -Imachine "$source" -o "$RUNNER_TEMP/check"
+            "$RUNNER_TEMP/check"
+          done
+  blackfin:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: machine
+      - uses: actions/checkout@v4
+        with:
+          repository: etcetc000/open-xy
+          ref: ${{ env.SDK_REF }}
+          path: sdk
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python sdk/sdk.py toolchain fetch
+      - run: python sdk/sdk.py compile --machine machine --out "$env:RUNNER_TEMP/hurdygurdy-module"

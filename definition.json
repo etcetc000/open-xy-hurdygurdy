@@ -237,13 +237,13 @@
     "sharedBytes": 44620,
     "outputPeakQ31": 644245094,
     "display": {
-      "kind": "drawing",
       "stateBytes": 80,
       "stateAlignment": 4,
       "paths": 4,
       "points": 64,
       "nodes": 46,
-      "palette": 16
+      "palette": 16,
+      "texts": 0
     }
   }
 }

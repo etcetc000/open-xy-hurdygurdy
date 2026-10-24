@@ -4,7 +4,7 @@
 namespace hurdygurdy {
 // Four outlines (melody string, twin string, wheel rim, crank arm) and 46
 // nodes in all; 16 grey palette entries. Matches resources.display.
-using Frame = opxy::draw::Frame<4, 64, 46, 16>;
+using Frame = opxy::draw::Frame<4, 64, 46, 0, 16>;
 struct DisplayState {
     opxy::u32 initialized, track, note_serial;
     opxy::u32 wheel_phase;   // 65536 per turn

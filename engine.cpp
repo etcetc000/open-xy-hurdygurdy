@@ -439,6 +439,9 @@ void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
         // The twin joins fully by 12% Unison; above that the knob only detunes.
         const i32 twin_target = c.unison <= 21474836 ? 0
             : multiply(c.unison >= 268435456 ? maximum : c.unison * 8, 1825361101);  // up to 0.85
+        // Integer smoothing stalls at 1..255. End that inaudible tail so an
+        // unison string switched off does not consume CPU for the whole note.
+        if (twin_target == 0 && voice.twin_gain < 256) voice.twin_gain = 0;
         if (twin_target > 0 || voice.twin_gain > 0) {
             const i32 ratio = lookup33(hg_twin_ratio, c.unison);
             u32 twin_periods[4];

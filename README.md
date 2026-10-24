@@ -1,5 +1,10 @@
 # Hurdy Gurdy
 
+A standalone Open-XY SDK 1.0 migration of the supplied Hurdy Gurdy source.
+See [AUDIT.md](AUDIT.md) for scope, findings and validation, and
+[PROVENANCE.md](PROVENANCE.md) for source and unresolved licensing.
+CI pins SDK commit `e8fc2a13bca715079f722df5a23426fac6b8f30b`.
+
 A bowed-string synth. Each note bows a melody string (the chanterelle) with a
 friction model of a rosined wheel. Three drone strings (bourdon, mouche and
 trompette) are bowed once for the whole machine by the newest note, so chords
@@ -25,9 +30,10 @@ soundbox grows with Body, the drone strings brighten with Drone, the key
 letter shows Tonic and a second melody string appears with Unison.
 
 ```sh
-python sdk.py preview --engine hurdygurdy --out local/hg-preview-001
-python tools/serve_harness.py --preview local/hg-preview-001
-python sdk.py check
+python ../open-xy/sdk.py preview --machine . --out ../open-xy/local/hg-preview-001
+python ../open-xy/tools/serve_harness.py --preview ../open-xy/local/hg-preview-001
+python ../open-xy/sdk.py test --machine . --host-cxx g++
+python ../open-xy/sdk.py check
 ```
 
 | File | Owns |
@@ -36,7 +42,7 @@ python sdk.py check
 | [core.h](core.h), [engine.cpp](engine.cpp) | String, drone and voice state; bowing, chien, soundbox |
 | [tables.h](tables.h) | Friction curve, drone periods, soundbox modes, coup rates, unison ratios, loudness grid, display sine |
 | [display.h](display.h), [display.cpp](display.cpp), [panel.svg.fragment](panel.svg.fragment) | The screen |
-| [machine.json](machine.json) | Kind, identity (engine 36, page 84), icon and init envelope |
+| [machine.json](machine.json) | SDK version, kind, requested identity (engine 36, page 84) and icon |
 
 ## Sound model
 
@@ -70,6 +76,27 @@ Notes below about 44 Hz fold up an octave.
   voice whose strings were taken and that holds no drones does no work.
 - Output peaks near 0.22 in normal use and is limited at 0.3, the declared
   peak.
-- Device CPU has not been measured. On the host the engine costs about 2.6
-  times 2op FM per voice; check on hardware before relying on eight-note
-  chords with Unison next to heavy engines.
+- Device CPU has not been measured. The current SDK host estimate exceeds
+  its CPU guidance; see [the audit](AUDIT.md) for measured scenarios and limits.
+  Drone ownership still needs correction before release.
+
+## Development
+
+Requires the SDK preview prerequisites (Python, NumPy, Node, Clang with
+wasm32 support) and a host C++11 compiler. On Windows, select a Clang build
+with wasm32 support using `--cxx`; some LLVM-MinGW builds only target Windows.
+
+`tests/audio.cpp` checks control corners, pitch extremes, output bounds,
+unison shutdown and voice stealing. `tests/display.cpp` checks frame bounds,
+initial note snapshots, reduced motion and geometry keys. CI also runs these
+with undefined-behavior sanitization and compiles the native module.
+
+`benchmarks/audio.cpp` times one and eight voices with melody, unison, drones,
+all features, and unison switched off. Compile with `-std=c++11 -O2`,
+`-I../open-xy/sdk/include -I.`, placing the executable in the SDK local folder.
+It also reproduces the outstanding drone-owner ordering issue. Host timing
+is diagnostic and has no pass/fail performance threshold.
+
+The requested engine/page numbers are hints for a new build. Preserve the
+previous package layout when rebuilding existing projects; an older image
+that hardcoded engine 36 needs its original layout reconstructed first.

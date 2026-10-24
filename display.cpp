@@ -57,8 +57,12 @@ inline void at(Frame& frame, u32 node, i32 x, i32 y, u32 shade, Paint paint = fi
 // A bowed string's Helmholtz shape: two straight segments meeting at a kink.
 // `travel` 0..65535 is the kink's place on its round trip; out and back trace
 // the two halves of the lens.
-inline void draw_string(Frame::path_type& path, u32 travel, i32 amplitude, u32 key) {
+inline void draw_string(Frame::path_type& path, u32 travel, i32 amplitude) {
     const u32 trip = travel & 65535u;
+    // These are the only geometry inputs (amplitude is bounded to 6144).
+    // Stable keys avoid native path rewrites when motion is paused.
+    const u32 key = 1u + trip + (static_cast<u32>(amplitude) << 16);
+    if (path.key == key) return;
     const u32 along = trip < 32768u ? trip * 2u : (65535u - trip) * 2u;  // 0..65535
     const i32 lens = static_cast<i32>((along * (65536u - along)) >> 20); // 0..1024
     i32 height = (amplitude * lens) >> 10;
@@ -80,6 +84,8 @@ inline void draw_string(Frame::path_type& path, u32 travel, i32 amplitude, u32 k
 // The wheel's rim through its opening: a spine with ridges that scroll down.
 inline void draw_rim(Frame::path_type& path, u32 phase) {
     const i32 offset = static_cast<i32>((phase >> 13) & 7u);   // one ridge every 8 px
+    const u32 key = 1 + static_cast<u32>(offset);
+    if (path.key == key) return;
     u32 n = 0;
     path.points[n++] = { 7 * unit, -38 * unit };
     for (i32 k = 0; k < 9; ++k) {
@@ -92,18 +98,20 @@ inline void draw_rim(Frame::path_type& path, u32 phase) {
     const u32 forward = n;
     for (u32 i = 0; i < forward && n < Frame::point_count; ++i) path.points[n++] = path.points[forward - 1 - i];
     for (; n < Frame::point_count; ++n) path.points[n] = path.points[0];
-    path.key = 1 + static_cast<u32>(offset);
+    path.key = key;
 }
 
 // The crank turns about the shaft, so from above its handle swings up and down.
 inline i32 draw_crank(Frame::path_type& path, u32 phase) {
     const i32 swing = floor_q10(sine(phase) * 24);
+    const u32 key = 1 + static_cast<u32>(swing + 64);
+    if (path.key == key) return swing;
     const Point points[4] = { { 5 * unit, 0 }, { -6 * unit, 0 }, { -6 * unit, swing * unit }, { -16 * unit, swing * unit } };
     u32 n = 0;
     for (u32 i = 0; i < 4; ++i) path.points[n++] = points[i];
     for (u32 i = 3; i-- > 0;) path.points[n++] = points[i];
     for (; n < Frame::point_count; ++n) path.points[n] = points[0];
-    path.key = 1 + static_cast<u32>(swing + 64);
+    path.key = key;
     return swing;
 }
 }  // namespace
@@ -119,6 +127,7 @@ inline void display_reset(DisplayState& state) {
 // Screen work only: no audio state, allocation or clock. Note starts arrive as
 // a serial snapshot; several between frames count as one.
 inline void display(DisplayState& state, const opxy::draw::Input& input, Frame& frame) {
+    for (u32 i = 0; i < opxy::page_controls; ++i) header(frame, i, "");
     const i32 wheel = control(input, 0), buzz = control(input, 1), size = control(input, 2);
     const i32 unison = control(input, 3), rosin = control(input, 4), coup = control(input, 5);
     const i32 drone = control(input, 6);
@@ -208,16 +217,16 @@ inline void display(DisplayState& state, const opxy::draw::Input& input, Frame& 
     const u32 kink_rate = 640 + static_cast<u32>(tenths(wheel));        // Q10 trips per second
     state.kink_phase += static_cast<u32>(elapsed) * kink_rate / 16u;
     const i32 amplitude = ((2 * unit + 4 * state.activity) * (512 + (tenths(wheel) >> 1))) >> 10;
-    draw_string(frame.paths[0], state.kink_phase, amplitude, 1 + (state.frame & 0xffffu));
+    draw_string(frame.paths[0], state.kink_phase, amplitude);
     place(frame, melody, string_x * unit, melody_y * unit, 2 * unit, string_white, stroke);
     at(frame, melody_ends, 0, 0, line_mid, stroke);
     if (unison > 21474836) {
         state.twin_offset += static_cast<u32>(elapsed) * static_cast<u32>(tenths(unison) + 40) / 4u;
-        draw_string(frame.paths[1], state.kink_phase + state.twin_offset, amplitude, 1 + (state.frame & 0xffffu));
+        draw_string(frame.paths[1], state.kink_phase + state.twin_offset, amplitude);
         place(frame, twin, string_x * unit, twin_y * unit, 2 * unit, unison > 1073741824 ? string_white : string_grey, stroke);
         at(frame, twin_ends, 0, 0, line_dark, stroke);
     } else {
-        draw_string(frame.paths[1], 0, 0, 1);
+        draw_string(frame.paths[1], 0, 0);
         hide(frame, twin);
         hide(frame, twin_ends);
     }
