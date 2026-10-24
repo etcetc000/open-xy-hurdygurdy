@@ -1,0 +1,249 @@
+{
+  "schema": 1,
+  "id": "hurdygurdy",
+  "name": "Hurdy Gurdy",
+  "parameters": [
+    {
+      "id": "wheel",
+      "label": "Wheel",
+      "default": 0.55,
+      "mapping": {
+        "kind": "linear",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "display": "percent"
+    },
+    {
+      "id": "buzz",
+      "label": "Buzz",
+      "default": 0,
+      "mapping": {
+        "kind": "linear",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "display": "percent"
+    },
+    {
+      "id": "body",
+      "label": "Body",
+      "default": 0.5,
+      "mapping": {
+        "kind": "linear",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "display": "percent"
+    },
+    {
+      "id": "unison",
+      "label": "Unison",
+      "default": 0,
+      "mapping": {
+        "kind": "linear",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "display": "percent"
+    },
+    {
+      "id": "rosin",
+      "label": "Rosin",
+      "control": 0,
+      "default": 0.45,
+      "mapping": {
+        "kind": "linear",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "display": "percent"
+    },
+    {
+      "id": "coup",
+      "label": "Coup",
+      "control": 1,
+      "default": 0,
+      "mapping": {
+        "kind": "linear",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "display": "percent"
+    },
+    {
+      "id": "drone",
+      "label": "Drone",
+      "control": 2,
+      "default": 0,
+      "mapping": {
+        "kind": "linear",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "display": "percent"
+    },
+    {
+      "id": "tonic",
+      "label": "Tonic",
+      "control": 2,
+      "default": 0.041667,
+      "mapping": {
+        "kind": "enum",
+        "labels": [
+          "C",
+          "Db",
+          "D",
+          "Eb",
+          "E",
+          "F",
+          "Gb",
+          "G",
+          "Ab",
+          "A",
+          "Bb",
+          "B"
+        ]
+      },
+      "display": "enum"
+    }
+  ],
+  "presets": {
+    "Chanterelle": {
+      "wheel": 0.55,
+      "buzz": 0.0,
+      "body": 0.5,
+      "unison": 0.0,
+      "rosin": 0.45,
+      "coup": 0.0,
+      "drone": 0.0,
+      "tonic": 0.041667
+    },
+    "Bourree": {
+      "wheel": 0.62,
+      "buzz": 0.32,
+      "body": 0.5,
+      "unison": 0.15,
+      "rosin": 0.5,
+      "coup": 0.3,
+      "drone": 0.65,
+      "tonic": 0.041667
+    },
+    "Vielle": {
+      "wheel": 0.45,
+      "buzz": 0.0,
+      "body": 0.62,
+      "unison": 0.2,
+      "rosin": 0.35,
+      "coup": 0.0,
+      "drone": 0.45,
+      "tonic": 0.208333
+    },
+    "Organistrum": {
+      "wheel": 0.35,
+      "buzz": 0.0,
+      "body": 0.95,
+      "unison": 0.55,
+      "rosin": 0.3,
+      "coup": 0.0,
+      "drone": 0.8,
+      "tonic": 0.625
+    },
+    "Galop": {
+      "wheel": 0.65,
+      "buzz": 0.4,
+      "body": 0.5,
+      "unison": 0.15,
+      "rosin": 0.55,
+      "coup": 0.75,
+      "drone": 0.55,
+      "tonic": 0.625
+    },
+    "Zanfona": {
+      "wheel": 0.7,
+      "buzz": 0.35,
+      "body": 0.3,
+      "unison": 0.25,
+      "rosin": 0.6,
+      "coup": 0.45,
+      "drone": 0.6,
+      "tonic": 0.208333
+    },
+    "Chien Fou": {
+      "wheel": 0.75,
+      "buzz": 0.85,
+      "body": 0.45,
+      "unison": 0.1,
+      "rosin": 0.7,
+      "coup": 0.85,
+      "drone": 0.6,
+      "tonic": 0.208333
+    },
+    "Rasp": {
+      "wheel": 0.9,
+      "buzz": 0.55,
+      "body": 0.25,
+      "unison": 0.0,
+      "rosin": 1.0,
+      "coup": 0.3,
+      "drone": 0.4,
+      "tonic": 0.375
+    },
+    "Whisper": {
+      "wheel": 0.15,
+      "buzz": 0.0,
+      "body": 0.65,
+      "unison": 0.3,
+      "rosin": 0.1,
+      "coup": 0.0,
+      "drone": 0.35,
+      "tonic": 0.791667
+    },
+    "Drone Hall": {
+      "wheel": 0.5,
+      "buzz": 0.0,
+      "body": 0.85,
+      "unison": 0.4,
+      "rosin": 0.4,
+      "coup": 0.0,
+      "drone": 1.0,
+      "tonic": 0.041667
+    },
+    "Swarm": {
+      "wheel": 0.8,
+      "buzz": 0.7,
+      "body": 0.7,
+      "unison": 1.0,
+      "rosin": 0.8,
+      "coup": 0.2,
+      "drone": 0.9,
+      "tonic": 0.458333
+    },
+    "Pilgrim": {
+      "wheel": 0.5,
+      "buzz": 0.2,
+      "body": 0.75,
+      "unison": 0.3,
+      "rosin": 0.45,
+      "coup": 0.25,
+      "drone": 0.7,
+      "tonic": 0.791667
+    }
+  },
+  "resources": {
+    "voiceBytes": 80,
+    "voiceAlignment": 4,
+    "voiceCapacity": 128,
+    "sharedBytes": 44620,
+    "outputPeakQ31": 644245094,
+    "display": {
+      "kind": "drawing",
+      "stateBytes": 80,
+      "stateAlignment": 4,
+      "paths": 4,
+      "points": 64,
+      "nodes": 46,
+      "palette": 16
+    }
+  }
+}

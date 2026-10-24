@@ -1,0 +1,15 @@
+local/
+.env*
+!.env.example
+*.pem
+*.key
+__pycache__/
+*.pyc
+node_modules/
+*.ldr
+*.tfw
+*.elf
+*.bin
+*.exe
+*.dll
+*.zip

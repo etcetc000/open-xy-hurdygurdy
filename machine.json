@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "kind": "synth",
+  "description": "A bowed-string hurdy gurdy: rosined wheel, drones that carry across notes, and a buzzing bridge you stroke in time.",
+  "icon": "M23 40a14 14 0 1 0 0-28a14 14 0 1 0 0 28M23 26L33 16M4 10H42M4 16H42",
+  "identity": {
+    "engine": 36,
+    "page": 84
+  }
+}
