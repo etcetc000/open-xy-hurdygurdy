@@ -101,10 +101,14 @@ inline i32 roughen(u32& random, i32& noise) {
 // interpolated. Lines hold Q15 words; taps return Q31.
 inline i32 tap(const opxy::i16* line, u32 mask, u32 position, u32 delay) {
     const u32 whole = delay >> 12;
-    const i32 fraction = static_cast<i32>((delay & 4095u) << 19);
-    const i32 a = static_cast<i32>(line[(position - whole) & mask]) * 65536;
-    const i32 b = static_cast<i32>(line[(position - whole - 1u) & mask]) * 65536;
-    return a + multiply(b - a, fraction);
+    const i32 fraction = static_cast<i32>(delay & 4095u);
+    const i32 a = line[(position - whole) & mask];
+    const i32 b = line[(position - whole - 1u) & mask];
+    // Q15 endpoints and a Q12 fraction: the signed product fits 28 bits.
+    // Its Q31 contribution is an exact multiple of 16, so no Q31 multiply
+    // or rounding is needed. Unsigned shifts keep full-range endpoints defined.
+    return static_cast<i32>((static_cast<u32>(a) << 16) +
+                            (static_cast<u32>((b - a) * fraction) << 4));
 }
 
 inline i32 tap_whole(const opxy::i16* line, u32 mask, u32 position, u32 whole) {
@@ -163,11 +167,9 @@ inline void bow_string(String& s, i32* out, const i32* bow, const u32* periods, 
             const i32 slip = add(push[n], -add(from_bridge, from_nut));
             // Friction: the string sticks to the wheel near zero slip, slides beyond.
             const i32 scaled = multiply(magnitude(slip), slope);
-            const u32 index = static_cast<u32>(scaled) >> 20;
-            i32 friction = hg_bow[256];
-            if (index < 256)
-                friction = hg_bow[index] + multiply(hg_bow[index + 1] - hg_bow[index],
-                                                    static_cast<i32>((static_cast<u32>(scaled) & 0xfffffu) << 11));
+            // Nearest entry in a denser curve avoids interpolation per string sample.
+            const u32 index = (static_cast<u32>(scaled) + 131072u) >> 18;
+            const i32 friction = hg_bow[index < 1024 ? index : 1024];
             const i32 injected = multiply(slip, friction);
             neck[at & neck_mask] = store(add(from_bridge, injected));
             bridge[at & bridge_mask] = store(add(from_nut, injected));
@@ -317,26 +319,37 @@ inline i32 level_of(const Controls& c) {
 
 // Three body modes (air, nasal, edge) plus the direct string, then a DC
 // blocker and the output level, in one pass.
-inline void soundbox(Voice& voice, i32* signal, const Controls& c) {
+inline void soundbox(Voice& voice, Shared& shared, i32* signal, const Controls& c) {
     const i32 body = c.body;
-    const u32 index = static_cast<u32>(body) >> 27;   // 0..15
-    const i32 fraction = static_cast<i32>((static_cast<u32>(body) & 0x7ffffffu) << 4);
-    i32 k[9];
-    for (u32 j = 0; j < 9; ++j) {
-        const i32 low = hg_body[index * 9 + j];
-        k[j] = low + multiply(hg_body[(index + 1) * 9 + j] - low, fraction);
+    const u32 body_key = static_cast<u32>(body) + 1u;
+    i32* const k = shared.body_coefficients;
+    if (shared.body_key != body_key) {
+        const u32 index = static_cast<u32>(body) >> 27;   // 0..15
+        const i32 fraction = static_cast<i32>((static_cast<u32>(body) & 0x7ffffffu) << 4);
+        for (u32 j = 0; j < 9; ++j) {
+            const i32 low = hg_body[index * 9 + j];
+            k[j] = low + multiply(hg_body[(index + 1) * 9 + j] - low, fraction);
+        }
+        // Mode gains grow 0.8x .. 1.2x with size around 0.45 air, 0.50 nasal, 0.40 edge.
+        const i32 g0 = 773094113 + multiply(body, 386547057);
+        const i32 g1 = 858993459 + multiply(body, 429496730);
+        const i32 g2 = 687194767 + multiply(body, 343597384);
+        shared.body_direct = 1181116006 - multiply(body, 322122547);      // 0.55 .. 0.40
+        // Fold each mode's gain into its input coefficient: three fewer multiplies
+        // per sample, same response (the resonators are linear).
+        k[0] = multiply(k[0], g0);
+        k[3] = multiply(k[3], g1);
+        k[6] = multiply(k[6], g2);
+        shared.body_key = body_key;
     }
-    // Mode gains grow 0.8x .. 1.2x with size around 0.45 air, 0.50 nasal, 0.40 edge.
-    const i32 g0 = 773094113 + multiply(body, 386547057);
-    const i32 g1 = 858993459 + multiply(body, 429496730);
-    const i32 g2 = 687194767 + multiply(body, 343597384);
-    const i32 direct = 1181116006 - multiply(body, 322122547);      // 0.55 .. 0.40
-    const i32 level = level_of(c);
-    // Fold each mode's gain into its input coefficient: three fewer multiplies
-    // per sample, same response (the resonators are linear).
-    k[0] = multiply(k[0], g0);
-    k[3] = multiply(k[3], g1);
-    k[6] = multiply(k[6], g2);
+    const u32 wheel_key = static_cast<u32>(c.wheel) + 1u;
+    const u32 rosin_key = static_cast<u32>(c.rosin) + 1u;
+    if (shared.level_wheel_key != wheel_key || shared.level_rosin_key != rosin_key) {
+        shared.output_gain = level_of(c);
+        shared.level_wheel_key = wheel_key;
+        shared.level_rosin_key = rosin_key;
+    }
+    const i32 direct = shared.body_direct, level = shared.output_gain;
     i32 in_1 = voice.body_1, in_2 = voice.body_2;
     i32 a1 = voice.mode_1[0], a2 = voice.mode_2[0];
     i32 n1 = voice.mode_1[1], n2 = voice.mode_2[1];
@@ -344,7 +357,7 @@ inline void soundbox(Voice& voice, i32* signal, const Controls& c) {
     i32 dc_in = voice.dc_in, dc_out = voice.dc_out;
     for (u32 i = 0; i < opxy::block_frames; ++i) {
         const i32 in = signal[i] / 2;                          // headroom for the resonances
-        const i32 difference = add(in, -in_2);
+        const i32 difference = in - in_2; // both are half-scale; subtraction fits
         i32 half = add(multiply(k[0], difference), add(multiply(k[1], a1), -multiply(k[2], a2)));
         a2 = a1; a1 = add(half, half);
         half = add(multiply(k[3], difference), add(multiply(k[4], n1), -multiply(k[5], n2)));
@@ -357,9 +370,10 @@ inline void soundbox(Voice& voice, i32* signal, const Controls& c) {
         dc_in = shaped;
         // Stock-like loudness: typical peaks near 0.22, like Macro Osc.
         i32 out = multiply(dc_out, level);                     // x level / 4
-        out = add(out, out); out = add(out, out);
-        out = add(out, out);                                   // x level x 2 (x1 net of the headroom)
-        signal[i] = clamp(out, -output_limit, output_limit);
+        // The final 0.3 ceiling subsumes all three saturating doublings.
+        // Bound before multiplying so the exact in-range result cannot overflow.
+        signal[i] = out > output_limit / 8 ? output_limit
+            : out < -output_limit / 8 ? -output_limit : out * 8;
     }
     voice.body_1 = in_1; voice.body_2 = in_2;
     voice.mode_1[0] = a1; voice.mode_2[0] = a2;
@@ -377,6 +391,7 @@ void initialize(Voice& voice, Shared& shared, u32 owner) {
     voice.random = owner * 2654435761u + 12345u;
     voice.drone_gain = 0;
     voice.drone_serial = shared.drone_serial;
+    voice.pitch_period = 0; // zero is not a valid cached period
     start(voice, shared, owner);
 }
 
@@ -433,7 +448,14 @@ void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
             bow[i] = voice.bow + multiply(voice.bow, multiply(rough, b.roughness) * 4);
         }
         u32 periods[4];
-        for (u32 part = 0; part < 4; ++part) periods[part] = period_of(pitch[part * segment]);
+        for (u32 part = 0; part < 4; ++part) {
+            const u32 increment = pitch[part * segment];
+            if (!voice.pitch_period || increment != voice.pitch_increment) {
+                voice.pitch_increment = increment;
+                voice.pitch_period = period_of(increment);
+            }
+            periods[part] = voice.pitch_period;
+        }
         bow_string(slot->main, output, bow, periods, main_position, b);
         // The twin joins fully by 12% Unison; above that the knob only detunes.
         const i32 twin_target = c.unison <= 21474836 ? 0
@@ -449,10 +471,23 @@ void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
                 twin_periods[part] = period < shortest_period ? shortest_period : period;
             }
             bow_string(slot->twin, work, bow, twin_periods, twin_position, b);
-            for (u32 i = 0; i < opxy::block_frames; ++i) {
-                voice.twin_gain += (twin_target - voice.twin_gain) / 256;
-                const i32 together = add(output[i], multiply(work[i], voice.twin_gain));
-                output[i] = together - multiply(together, voice.twin_gain / 3);
+            if ((twin_target - voice.twin_gain) / 256 == 0) {
+                // Once integer smoothing has settled, these are block constants.
+                const i32 gain = voice.twin_gain;
+                const i32 attenuation = static_cast<i32>(static_cast<u32>(gain) / 3u);
+                for (u32 i = 0; i < opxy::block_frames; ++i) {
+                    const i32 together = add(output[i], multiply(work[i], gain));
+                    output[i] = together - multiply(together, attenuation);
+                }
+            } else {
+                for (u32 i = 0; i < opxy::block_frames; ++i) {
+                    voice.twin_gain += (twin_target - voice.twin_gain) / 256;
+                    const i32 together = add(output[i], multiply(work[i], voice.twin_gain));
+                    // The gain is nonnegative. Unsigned division by three uses
+                    // constant arithmetic on Blackfin instead of a runtime helper.
+                    const i32 attenuation = static_cast<i32>(static_cast<u32>(voice.twin_gain) / 3u);
+                    output[i] = together - multiply(together, attenuation);
+                }
             }
         }
         // Key tangent: a short knock as the key meets the string.
@@ -487,7 +522,7 @@ void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
         }
     }
 
-    soundbox(voice, output, c);
+    soundbox(voice, shared, output, c);
 }
 
 }  // namespace hurdygurdy

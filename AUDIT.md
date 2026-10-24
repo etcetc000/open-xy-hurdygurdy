@@ -10,7 +10,7 @@ The interface migration is small. This is already a portable, fixed-point
 SDK synth with separate audio/display callbacks, bounded delay storage and
 eight shared melody leases. A rewrite is unnecessary. Release readiness is
 a larger task: shared-drone ownership has a reproducible ordering bug, CPU
-needs device qualification, musical behavior lacks reference tests, and the
+needs device qualification, musical behavior still needs listening qualification, and the
 archive supplies no redistribution license.
 
 The author did consider optimization: Q15 delay storage, only one fractional
@@ -92,14 +92,41 @@ The last row improves about 24% for one voice and 26% for eight voices.
 Other differences are not claimed as improvements; this is a single before/
 after session with host noise. It does not establish native speedup percentages.
 
-Next optimization candidates:
+Completed quick optimizations after commit `0e343c8`:
 
-- Cache pitch-to-period results when increments repeat across the four
-  segments/blocks; retain correct pitch modulation and note-reset behavior.
+- Cache repeated pitch conversions and unchanged body/level coefficients.
+- Interpolate Q15 delay words directly; simplify bounded soundbox arithmetic.
+- Move settled Unison gain work outside the sample loop and use unsigned
+  constant division during fades. Native assembly no longer calls the signed
+  division helper that previously ran 64 times per Unison voice block.
+- Replace interpolated 257-entry bow friction with a nearest-entry 1,025-entry
+  curve. Its coefficient error stays below 0.008 against the documented model.
+  This deliberately permits sound differences. Caches add 1,080 state bytes
+  across the declared capacity; the denser table adds 3,072 constant bytes.
+
+Five interleaved before/after sweeps (median of each sweep's best-of-five
+measurement, same host compiler) gave these nanoseconds per group block:
+
+| Setting | Before, 1 voice | Optimized, 1 voice | Before, 8 voices | Optimized, 8 voices |
+| --- | ---: | ---: | ---: | ---: |
+| Melody | 2,182 | 1,934 | 18,351 | 15,765 |
+| Unison | 3,103 | 2,683 | 26,368 | 22,031 |
+| Drones + buzz + coup | 5,987 | 5,198 | 23,100 | 20,082 |
+| All features | 7,228 | 5,999 | 31,110 | 27,317 |
+
+These host results improve roughly 11-17%; they are not device cycle savings.
+A nearby FM2op sweep took 889 ns per voice block, so FM parity is not achieved.
+Native timing remains necessary to quantify the division-helper savings.
+
+Two-second sustained renders of all twelve presets changed RMS by at most
+2.13 dB and energy-weighted spectral centroid by at most 21.4% against
+`0e343c8`. Five isolated melody pitches from 110 to 1,760 Hz retained the same
+FFT peak bins (about 0.5 Hz resolution). This is a limited characterization,
+not a perceptual or exhaustive tuning qualification; audition the preview.
+
+Next optimization candidates:
 - Avoid bowing inaudible bourdon/mouche strings when only Buzz needs the
   trompette. Define how dormant strings resume before changing this behavior.
-- Cache body/gain coefficients while controls are unchanged; profile whether
-  the state/memory cost is worthwhile.
 - Review note-start clearing of a 4.6 KiB melody slot, especially simultaneous
   notes. Steady-state render timing omits that burst.
 - Profile native generated code, stack and memory traffic before rewriting
@@ -114,10 +141,13 @@ authorized session. Listen for dropouts and assess GUI responsiveness together.
 
 The new audio test covers 128 continuous-control corners, varying tonic,
 zero/maximum/modulated pitch, declared output peak, unison shutdown and stolen
-lease safety. Both test programs also pass undefined-behavior sanitization.
+lease safety. Five test programs pass undefined-behavior sanitization.
+Preset tests additionally exercise eight voices, mixed controls, retriggers
+and automation across all twelve presets; friction and interpolation have
+separate numeric checks.
 This is useful coverage, not proof over every state trajectory.
 
-Still needed: all-preset rendered references, pitch measurement over the
+Still needed: listening review of all presets, pitch measurement over the
 claimed range, low-note folding, long-held notes, silence/DC/clipping statistics,
 automation discontinuities, repeated note starts, abrupt tonic changes and
 drone handovers. Preserve the original recording/presets outside the checkout

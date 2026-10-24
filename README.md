@@ -56,7 +56,7 @@ sample of delay), so a note's loop delay is the period minus one sample and
 tuning stays within a cent up to C6. The bridge side holds whole samples and
 the neck side the fraction, so each sample needs one interpolated tap.
 Friction follows the STK bowed-string curve, clip((u + 0.75)^-4, 0.01, 0.98),
-in a 257-entry table. Wheel sets bow speed and string brightness, Rosin the
+in a 1,025-entry table with nearest-entry lookup. Wheel sets bow speed and string brightness, Rosin the
 curve's slope and the wheel's roughness noise. A measured Wheel × Rosin
 loudness grid sets the output gain, so those two knobs mostly change character.
 
@@ -67,12 +67,14 @@ Notes below about 44 Hz fold up an octave.
 ## Native notes
 
 - 32-bit arithmetic only: Q31 signals through `opxy::q31::multiply`, Q12 delay
-  lengths, one 32-bit division per 16 samples for pitch. No 64-bit helpers.
+  lengths, pitch-to-period division only when the sampled pitch changes.
+  No 64-bit helpers. Unison gain uses unsigned constant division to avoid a
+  software division helper inside the sample loop.
 - Delay lines store Q15 words. A melody slot (chanterelle and twin) is 4.6 KiB;
   eight slots are shared by every track through `LeasePool`, so at most eight
   melody notes sound at once and a ninth takes the oldest note's strings. That
   also bounds the engine's worst-case CPU.
-- Memory: 44,620 bytes shared plus 80 bytes per voice (128 voices).
+- Memory: 44,676 bytes shared plus 88 bytes per voice (128 voices).
 - Per sample, a sounding note costs one string (two with Unison) and the
   soundbox. The drones cost three strings once for the whole machine, only
   while Drone or Buzz is above zero; the chien runs only while Buzz is up. A
@@ -90,9 +92,17 @@ wasm32 support) and a host C++11 compiler. On Windows, select a Clang build
 with wasm32 support using `--cxx`; some LLVM-MinGW builds only target Windows.
 
 `tests/audio.cpp` checks control corners, pitch extremes, output bounds,
-unison shutdown and voice stealing. `tests/display.cpp` checks frame bounds,
-initial note snapshots, reduced motion and geometry keys. CI also runs these
-with undefined-behavior sanitization and compiles the native module.
+unison shutdown and voice stealing. `tests/presets.cpp` exercises all twelve
+presets with eight voices, different controls per voice, automation and
+retriggers. The interpolation and friction tests check numeric accuracy;
+`tests/display.cpp` checks frame bounds, initial note snapshots, reduced
+motion and geometry keys. CI also runs these with undefined-behavior
+sanitization and compiles the native module.
+
+`python generators/friction.py` regenerates the friction curve from
+clip((u + 0.75)^-4, 0.01, 0.98). The nearest-entry approximation changes the
+sound slightly; it avoids interpolation in every string sample. Body and
+level coefficients are cached until their controls change.
 
 `benchmarks/audio.cpp` times one and eight voices with melody, unison, drones,
 all features, and unison switched off. Compile with `-std=c++11 -O2`,

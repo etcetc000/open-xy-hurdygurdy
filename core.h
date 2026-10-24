@@ -56,6 +56,10 @@ struct Shared {
     i32 drone_block[opxy::block_frames];
     u32 drone_owner;     // voice that bows the drones; 0 when none
     u32 drone_serial;    // bumped each time the owner renders a block
+    // Last soundbox controls, shared across serial voice callbacks. Keys are
+    // normalized Q31 values plus one; zero means the cache is uninitialized.
+    u32 body_key, level_wheel_key, level_rosin_key;
+    i32 body_coefficients[9], body_direct, output_gain;
 };
 
 struct Voice {
@@ -72,6 +76,7 @@ struct Voice {
     i32 body_1, body_2;  // soundbox input history
     i32 mode_1[3], mode_2[3];
     i32 dc_in, dc_out;
+    u32 pitch_increment, pitch_period; // exact last pitch conversion, shared by segments
 };
 
 void initialize(Voice&, Shared&, u32 owner);
