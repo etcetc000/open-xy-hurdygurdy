@@ -135,8 +135,8 @@ inline void display(DisplayState& state, const opxy::draw::Input& input, Frame& 
     if (tonic > 11) tonic = 11;
     const bool still = input.reduced_motion != 0;
     const i32 elapsed = still ? 0 : clamp(input.elapsed, 0, 102);
-    const bool drone_knob = input.shown[2] == 6 || input.shown[2] == 7;
-    const bool tonic_knob = input.shown[2] == 7;
+    const bool drone_knob = input.shown[2] == 6;
+    const bool tonic_knob = input.shown[3] == 7;
 
     // ---- Notes, wheel strokes and decays ----
     if (!state.initialized || state.track != input.track) {
@@ -245,7 +245,7 @@ inline void display(DisplayState& state, const opxy::draw::Input& input, Frame& 
         else hide(frame, spark_first + i);
     }
 
-    // ---- Tonic letter: whiter while the white knob edits it ----
+    // ---- Tonic letter: whiter while the orange knob edits it ----
     const u32 letter_shade = tonic_knob ? line_white : drone_knob || d >= 4 ? line_light : line_dark;
     for (u32 k = 0; k < 7; ++k) {
         if (k == tonic_letter[tonic]) at(frame, letter_first + k, 444, 52, letter_shade, stroke);

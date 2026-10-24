@@ -31,8 +31,7 @@ const u32 drone_position = 117;
 const u32 segment = 16;                  // pitch updates every 16 samples
 
 // Control slots in definition.json order: the four encoders (blue, green,
-// white, orange), then the alternates a press reaches. The white encoder is
-// the drone knob: Body, press for Drone, press again for Tonic.
+// white, orange), then one alternate per encoder: Rosin, Coup, Drone, Tonic.
 enum { wheel_slot, buzz_slot, body_slot, unison_slot, rosin_slot, coup_slot, drone_slot, tonic_slot };
 
 inline i32 normalized(i32 value) { return value < 0 ? 0 : value; }

@@ -86,7 +86,7 @@
     {
       "id": "tonic",
       "label": "Tonic",
-      "control": 2,
+      "control": 3,
       "default": 0.041667,
       "mapping": {
         "kind": "enum",

@@ -16,8 +16,11 @@ Everything passes through a three-mode soundbox.
 | --- | --- | --- |
 | Blue | **Wheel**: bow speed; faster is brighter and stronger | **Rosin**: grip; low is airy, high is gritty |
 | Green | **Buzz**: chien sensitivity; above half it buzzes all the time | **Coup**: wrist strokes; up to 40% one stroke on each note, above that repeating strokes from 1.5 to 9 Hz, restarted by each note |
-| White | **Body**: soundbox from small and bright to large and warm | **Drone**: drone level, 0 is off. Press again: **Tonic**, the drone key (C to B) |
-| Orange | **Unison**: a second chanterelle; joins by 12%, then detunes up to 22 cents | |
+| White | **Body**: soundbox from small and bright to large and warm | **Drone**: drone level, 0 is off |
+| Orange | **Unison**: a second chanterelle; joins by 12%, then detunes up to 22 cents | **Tonic**: the drone key (C to B) |
+
+Each encoder toggles between two parameters when pressed. Tonic remains in
+saved parameter slot 7; moving its encoder preserves preset and project values.
 
 The drones are tuned in just intonation from the tonic: bourdon in G1 to F#2,
 mouche a twelfth above (3:1), trompette two octaves above (4:1). They sound
