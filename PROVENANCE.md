@@ -2,6 +2,11 @@
 
 Imported machine source from `Hurdy Gurdy for OP-XY.zip`.
 
+Original instrument author: [SammiBabe666](https://github.com/SammiBabe666),
+identified by the repository owner. Instrument authorship credit belongs to
+SammiBabe666; this repository contains the SDK migration and subsequent
+optimization work.
+
 Archive SHA-256: `e21bc461aad517d71139c3d093a813e67aa019c2dc4df88997029ebdf916c749`.
 
 Original path: `Hurdy Gurdy for OP-XY/engine/machines/hurdygurdy/`.

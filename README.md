@@ -1,6 +1,7 @@
 # Hurdy Gurdy
 
-A standalone Open-XY SDK 1.0 migration of the supplied Hurdy Gurdy source.
+A standalone Open-XY SDK 1.0 migration of Hurdy Gurdy by
+[SammiBabe666](https://github.com/SammiBabe666), the original instrument author.
 See [AUDIT.md](AUDIT.md) for scope, findings and validation, and
 [PROVENANCE.md](PROVENANCE.md) for source and unresolved licensing.
 CI pins SDK commit `e8fc2a13bca715079f722df5a23426fac6b8f30b`.
