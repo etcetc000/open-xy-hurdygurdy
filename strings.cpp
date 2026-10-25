@@ -21,24 +21,31 @@ inline void samples(String& s, i32* out, const i32* bow, u32 count,
     const i32 side = b.side, centre = b.centre, slope = b.slope;
     const u32 whole = neck_now >> 12;
     const i32 fraction = static_cast<i32>(neck_now & 4095u);
+    // Scaling uses arithmetic shifts (floor): a signed division by a power of
+    // two costs a compare and a branch per use on Blackfin.
+    const opxy::u16* const table = hg_bow15;
     for (u32 n = 0; n < count; ++n) {
         if (!Fixed) neck_now = static_cast<u32>(static_cast<i32>(neck_now) + neck_step);
         const i32 arriving = bridge[(at - bridge_whole) & bridge_mask];
-        const i32 lossy = (side * (arriving + loss_2) + centre * loss_1) / 32768;
+        const i32 lossy = (side * (arriving + loss_2) + centre * loss_1) >> 15;
         loss_2 = loss_1;
         loss_1 = arriving;
-        const i32 from_bridge = -lossy;
-        const i32 a = Fixed ? neck[(at - whole) & neck_mask] : 0;
-        const i32 previous = Fixed ? neck[(at - whole - 1u) & neck_mask] : 0;
-        const i32 from_nut = -(Fixed ? a + (previous - a) * fraction / 4096
-                                    : tap(neck, neck_mask, at, neck_now));
-        const i32 slip = clamp(bow[n] - clamp(from_bridge + from_nut, -32767, 32767), -32767, 32767);
+        i32 nut;
+        if (Fixed) {
+            const i32 a = neck[(at - whole) & neck_mask];
+            const i32 previous = neck[(at - whole - 1u) & neck_mask];
+            nut = a + (((previous - a) * fraction) >> 12);
+        } else {
+            nut = tap(neck, neck_mask, at, neck_now);
+        }
+        // Both waves are Q15, so their sum fits i32; one clamp bounds the slip.
+        const i32 slip = clamp(bow[n] + lossy + nut, -32767, 32767);
         const u32 scaled = static_cast<u32>(magnitude(slip) * slope);
-        const u32 index = (scaled + 65536u) >> 17;
-        const i32 friction = hg_bow15[index < 1024 ? index : 1024];
-        const i32 injected = slip * friction / 32768;
-        neck[at & neck_mask] = static_cast<opxy::i16>(clamp(from_bridge + injected, -32767, 32767));
-        bridge[at & bridge_mask] = static_cast<opxy::i16>(clamp(from_nut + injected, -32767, 32767));
+        u32 index = (scaled + 65536u) >> 17;
+        if (index > 1024) index = 1024;
+        const i32 injected = (slip * table[index]) >> 15;
+        neck[at & neck_mask] = static_cast<opxy::i16>(clamp(injected - lossy, -32767, 32767));
+        bridge[at & bridge_mask] = static_cast<opxy::i16>(clamp(injected - nut, -32767, 32767));
         ++at;
         out[n] = arriving;
     }

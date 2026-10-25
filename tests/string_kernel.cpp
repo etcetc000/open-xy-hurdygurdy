@@ -43,16 +43,16 @@ inline void bow_string(String& s, i32* out, const i32* bow, const u32* periods, 
         for (u32 n = 0; n < span; ++n) {
             neck_now = static_cast<u32>(static_cast<i32>(neck_now) + neck_step);
             const i32 arriving = bridge[(at - bridge_whole) & bridge_mask];
-            const i32 lossy = (side * (arriving + loss_2) + centre * loss_1) / 32768;
+            const i32 lossy = (side * (arriving + loss_2) + centre * loss_1) >> 15;
             loss_2 = loss_1;
             loss_1 = arriving;
             const i32 from_bridge = -lossy;
-            const i32 from_nut = -tap(neck, neck_mask, at, neck_now);
-            const i32 slip = clamp(push[n] - clamp(from_bridge + from_nut, -32767, 32767), -32767, 32767);
+            const i32 from_nut = -(neck_step == 0 ? neck[(at - (neck_now >> 12)) & neck_mask] + (((neck[(at - (neck_now >> 12) - 1u) & neck_mask] - neck[(at - (neck_now >> 12)) & neck_mask]) * static_cast<i32>(neck_now & 4095u)) >> 12) : tap(neck, neck_mask, at, neck_now));
+            const i32 slip = clamp(push[n] - (from_bridge + from_nut), -32767, 32767);
             const u32 scaled = static_cast<u32>(magnitude(slip) * slope);
             const u32 index = (scaled + 65536u) >> 17;
             const i32 friction = hg_bow15[index < 1024 ? index : 1024];
-            const i32 injected = slip * friction / 32768;
+            const i32 injected = (slip * friction) >> 15;
             neck[at & neck_mask] = static_cast<opxy::i16>(clamp(from_bridge + injected, -32767, 32767));
             bridge[at & bridge_mask] = static_cast<opxy::i16>(clamp(from_nut + injected, -32767, 32767));
             ++at;

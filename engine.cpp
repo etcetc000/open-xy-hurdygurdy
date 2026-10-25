@@ -17,6 +17,9 @@
 
 namespace hurdygurdy {
 namespace {
+// Audio scaling uses arithmetic right shifts (floor) instead of signed
+// division by powers of two: one instruction instead of a sign fix-up.
+static_assert((-3 >> 1) == -2, "arithmetic right shift required");
 
 using opxy::q31::multiply;
 
@@ -135,6 +138,22 @@ inline void melody_string(String& s, i32* out, const i32* bow, const u32* period
     decimate(s, out, samples);
 }
 
+// Wheel speed with roughness. Noise and smoothing advance every fourth
+// sample and hold between: the roughness is low-passed near 220 Hz, so a
+// 2.76 kHz update keeps its character for a quarter of the work.
+const u32 rough_step = 4;
+inline void wheel(i32* bow, i32& smooth, i32 target, u32 shift, u32& random, i32& noise, i32 roughness) {
+    for (u32 i = 0; i < render_frames; i += rough_step) {
+        for (u32 k = 0; k < rough_step; ++k) smooth += (target - smooth) >> shift;  // same per-sample glide
+        random = random * 1664525u + 1013904223u;
+        noise += (static_cast<i32>(random) >> 1) - (noise >> 1);   // ~220 Hz at the 2.76 kHz update
+        const i32 rough = noise >> 17;
+        const i32 speed = smooth >> 16;
+        const i32 value = speed + ((speed * ((rough * roughness) >> 13)) >> 15);
+        for (u32 k = 0; k < rough_step; ++k) bow[i + k] = value;
+    }
+}
+
 // ---- Drones and chien ----------------------------------------------------
 
 const i32 drone_bow_limit = 150323855;   // 0.07: keeps coup surges inside range
@@ -179,12 +198,7 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
     const bool tonal = level_target > 0 || d.level > 0;
     if (tonal) {
         // Bourdon and mouche share one bow speed.
-        for (u32 i = 0; i < render_frames; ++i) {
-            d.bow[0] += (b.speed - d.bow[0]) / 256;
-            const i32 rough = roughen(d.random, d.noise);
-            const i32 speed = d.bow[0] / 65536;
-            bow[i] = speed + speed * (rough * b.roughness / 8192) / 32768;
-        }
+        wheel(bow, d.bow[0], b.speed, 8, d.random, d.noise, b.roughness);
         level = d.level;
         bow_string(d.bourdon, work, bow, bourdon_periods, drone_position, b, render_frames);
         for (u32 i = 0; i < render_frames; ++i) {
@@ -203,12 +217,14 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
 
     // Trompette: the current coup surges its bow speed (held for the block).
     const i32 surge = 1073741824 + multiply(d.coup, 966367642);   // 1 .. 1.9, halved
-    for (u32 i = 0; i < render_frames; ++i) {
-        d.bow[2] += (b.speed - d.bow[2]) / 256;
+    for (u32 i = 0; i < render_frames; i += rough_step) {
+        for (u32 k = 0; k < rough_step; ++k) d.bow[2] += (b.speed - d.bow[2]) >> 8;
         const i32 pushed = clamp(multiply(d.bow[2], surge) * 2, 0, drone_bow_limit);
-        const i32 rough = roughen(d.random, d.noise);
-        const i32 speed = pushed / 65536;
-        bow[i] = speed + speed * (rough * b.roughness / 8192) / 32768;
+        d.random = d.random * 1664525u + 1013904223u;
+        d.noise += (static_cast<i32>(d.random) >> 1) - (d.noise >> 1);
+        const i32 speed = pushed >> 16;
+        const i32 value = speed + ((speed * (((d.noise >> 17) * b.roughness) >> 13)) >> 15);
+        for (u32 k = 0; k < rough_step; ++k) bow[i + k] = value;
     }
     bow_string(d.trompette, work, bow, trompette_periods, drone_position, b, render_frames);
 
@@ -312,26 +328,31 @@ inline void soundbox(Voice& voice, Shared& shared, i32* signal, const Controls& 
     }
     // Q15 signal/state, Q13 mode coefficients and output gain. The largest
     // absolute coefficient sum is below 32768, so these products fit i32.
+    // Coefficients copied to locals: stores to `signal` could otherwise alias
+    // the shared table and force a reload of every coefficient per sample.
     const i32 direct = shared.body_direct, level = shared.output_gain;
+    const i32 k0 = k[0], k1 = k[1], k2 = k[2], k3 = k[3], k4 = k[4], k5 = k[5];
+    const i32 k6 = k[6], k7 = k[7], k8 = k[8];
+    const i32 pole = dc_pole >> 16;
     i32 in_1 = voice.body_1, in_2 = voice.body_2;
     i32 a1 = voice.mode_1[0], a2 = voice.mode_2[0];
     i32 n1 = voice.mode_1[1], n2 = voice.mode_2[1];
     i32 e1 = voice.mode_1[2], e2 = voice.mode_2[2];
     i32 dc_in = voice.dc_in, dc_out = voice.dc_out;
     for (u32 i = 0; i < render_frames; ++i) {
-        const i32 in = signal[i] / 2;
+        const i32 in = signal[i] >> 1;
         const i32 difference = in - in_2;
-        i32 mode = clamp((k[0] * difference + k[1] * a1 - k[2] * a2) / 8192, -32767, 32767);
+        i32 mode = clamp((k0 * difference + k1 * a1 - k2 * a2) >> 13, -32767, 32767);
         a2 = a1; a1 = mode;
-        mode = clamp((k[3] * difference + k[4] * n1 - k[5] * n2) / 8192, -32767, 32767);
+        mode = clamp((k3 * difference + k4 * n1 - k5 * n2) >> 13, -32767, 32767);
         n2 = n1; n1 = mode;
-        mode = clamp((k[6] * difference + k[7] * e1 - k[8] * e2) / 8192, -32767, 32767);
+        mode = clamp((k6 * difference + k7 * e1 - k8 * e2) >> 13, -32767, 32767);
         e2 = e1; e1 = mode;
         in_2 = in_1; in_1 = in;
-        const i32 shaped = clamp(in * direct / 32768 + a1 + n1 + e1, -32767, 32767);
-        dc_out = clamp(shaped - dc_in + dc_out * (dc_pole / 65536) / 32768, -32767, 32767);
+        const i32 shaped = clamp(((in * direct) >> 15) + a1 + n1 + e1, -32767, 32767);
+        dc_out = clamp(shaped - dc_in + ((dc_out * pole) >> 15), -32767, 32767);
         dc_in = shaped;
-        signal[i] = clamp(dc_out * level / 1024, -9830, 9830);
+        signal[i] = clamp((dc_out * level) >> 10, -9830, 9830);
     }
 
     voice.body_1 = in_1; voice.body_2 = in_2;
@@ -403,12 +424,7 @@ static void render_internal(Voice& voice, Shared& shared, u32 owner, opxy::Outpu
 
     // ---- Melody strings ----
     if (slot) {
-        for (u32 i = 0; i < render_frames; ++i) {
-            voice.bow += (b.speed - voice.bow) / 128;   // the wheel bites over ~12 ms
-            const i32 rough = roughen(voice.random, voice.noise);
-            const i32 speed = voice.bow / 65536;
-            bow[i] = speed + speed * (rough * b.roughness / 8192) / 32768;
-        }
+        wheel(bow, voice.bow, b.speed, 7, voice.random, voice.noise, b.roughness);   // bites over ~12 ms
         u32 periods[4];
         for (u32 part = 0; part < 4; ++part) {
             const u32 increment = pitch[part * segment * rate_factor];
@@ -504,9 +520,10 @@ void render(Voice& voice, Shared& shared, u32 owner, opxy::Output output,
     for (u32 i = 0; i < render_frames; ++i) {
         const i32 current = low[i] * 65536;
         const i32 difference = current - previous;
-        output[4*i] = previous + difference / 4;
-        output[4*i+1] = previous + difference / 2;
-        output[4*i+2] = current - difference / 4;
+        const i32 quarter = difference >> 2;
+        output[4*i] = previous + quarter;
+        output[4*i+1] = previous + (difference >> 1);
+        output[4*i+2] = current - quarter;
         output[4*i+3] = current;
         previous = current;
     }
