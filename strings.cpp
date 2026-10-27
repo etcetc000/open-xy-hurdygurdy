@@ -18,7 +18,9 @@ inline void samples(String& s, i32* out, const i32* bow, u32 count,
     opxy::i16* const bridge = s.bridge;
     u32 at = s.position, neck_now = s.neck_delay;
     i32 loss_1 = s.loss_1, loss_2 = s.loss_2;
-    const i32 side = b.side, centre = b.centre, slope = b.slope;
+    const i32 slope = b.slope;
+    // Quantized symmetric loss: 31/32 DC gain and a power-of-two curvature.
+    const u32 loss_shift = b.side < 192 ? 8 : b.side < 384 ? 7 : b.side < 768 ? 6 : 5;
     const u32 whole = neck_now >> 12;
     const i32 fraction = static_cast<i32>(neck_now & 4095u);
     // Scaling uses arithmetic shifts (floor): a signed division by a power of
@@ -27,7 +29,8 @@ inline void samples(String& s, i32* out, const i32* bow, u32 count,
     for (u32 n = 0; n < count; ++n) {
         if (!Fixed) neck_now = static_cast<u32>(static_cast<i32>(neck_now) + neck_step);
         const i32 arriving = bridge[(at - bridge_whole) & bridge_mask];
-        const i32 lossy = (side * (arriving + loss_2) + centre * loss_1) >> 15;
+        const i32 lossy = loss_1 - (loss_1 >> 5)
+            + ((arriving + loss_2 - 2 * loss_1) >> loss_shift);
         loss_2 = loss_1;
         loss_1 = arriving;
         i32 nut;

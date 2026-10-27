@@ -5,8 +5,8 @@
 
 // Hurdy Gurdy: a bowed-string machine.
 //
-// Each note bows a melody string (the chanterelle, plus an optional unison
-// twin) with a friction model of the rosined wheel. Three drone strings
+// Each note bows a melody string (the chanterelle) with a friction model
+// of the rosined wheel. Unison adds a detuned copy of that string. Three drone strings
 // (bourdon, mouche, trompette) are bowed once for the whole machine by the
 // newest note, so chords never stack drones and the drones carry on from note
 // to note. The trompette rattles the chien (the buzzing bridge) when the
@@ -28,7 +28,6 @@ const u32 q12 = 4096;
 const u32 longest_period = 250u * q12;  // quarter-rate samples; 44.1 Hz lower bound
 const u32 shortest_period = 3u * q12;    // about 3.7 kHz
 const u32 main_position = 113;           // wheel contact, Q10 fraction of the string (0.11)
-const u32 twin_position = 128;           // 0.125
 const u32 drone_position = 117;
 const u32 segment = 4;                 // pitch updates every 16 device samples
 
@@ -136,6 +135,41 @@ inline void melody_string(String& s, i32* out, const i32* bow, const u32* period
     faster.centre = 31948 - faster.side - faster.side;
     bow_string(s, samples, faster_bow, faster_periods, position, faster, 32);
     decimate(s, out, samples);
+}
+
+// Pitch-synchronous delay ramps: the two read heads are one input period
+// apart, reducing cancellation and pitch sidebands during their crossfade.
+// The main string still supplies the physical bow and harmonic evolution.
+inline void detuned_copy(DetunedCopy& s, i32* out, const i32* input, i32 ratio, const u32* periods) {
+    const u32 key = static_cast<u32>(ratio);
+    if (s.ratio_key != key) {
+        const u32 denominator = key >> 15;
+        s.step = ((65536u - denominator) << 16) / denominator;
+        s.ratio_key = key;
+    }
+    u32 phase = s.phase, at = s.position;
+    for (u32 part = 0; part < 4; ++part) {
+        const u32 window = periods[part] << 5; // two Q12 periods -> Q16
+        if (s.period_key != periods[part]) {
+            s.weight_scale = 0x80000000u / (window >> 9);
+            s.period_key = periods[part];
+            if (phase >= window) phase %= window;
+        }
+        for (u32 i = part * 4; i < part * 4 + 4; ++i) {
+            s.history[at & 511u] = static_cast<opxy::i16>(input[i]);
+            u32 opposite = phase + window / 2;
+            if (opposite >= window) opposite -= window;
+            const i32 a = tap(s.history, 511u, at, (phase >> 4) + 8192u);
+            const i32 b = tap(s.history, 511u, at, (opposite >> 4) + 8192u);
+            const u32 distance = phase < window / 2 ? phase : window - phase;
+            const i32 weight = static_cast<i32>(((distance >> 8) * s.weight_scale) >> 16);
+            out[i] = b + (((a - b) * weight) >> 15);
+            phase = phase >= s.step ? phase - s.step : phase + window - s.step;
+            ++at;
+        }
+    }
+    s.phase = phase;
+    s.position = at;
 }
 
 // Wheel speed with roughness. Noise and smoothing advance every fourth
@@ -442,13 +476,9 @@ static void render_internal(Voice& voice, Shared& shared, u32 owner, opxy::Outpu
         // unison string switched off does not consume CPU for the whole note.
         if (twin_target == 0 && voice.twin_gain < 64) voice.twin_gain = 0;
         if (twin_target > 0 || voice.twin_gain > 0) {
+            if (voice.twin_gain == 0) slot->twin = DetunedCopy{};
             const i32 ratio = lookup33(hg_twin_ratio, c.unison);
-            u32 twin_periods[4];
-            for (u32 part = 0; part < 4; ++part) {
-                u32 period = static_cast<u32>(multiply(static_cast<i32>(periods[part]), ratio));
-                twin_periods[part] = period < shortest_period ? shortest_period : period;
-            }
-            melody_string(slot->twin, work, bow, twin_periods, twin_position, b);
+            detuned_copy(slot->twin, work, output, ratio, periods);
             if ((twin_target - voice.twin_gain) / 64 == 0) {
                 // Once integer smoothing has settled, these are block constants.
                 const i32 gain = voice.twin_gain;

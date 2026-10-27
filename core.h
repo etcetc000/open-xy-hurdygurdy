@@ -28,10 +28,18 @@ struct String {
     u32 primed;
 };
 
-// A melody voice's strings: the chanterelle and its unison twin.
+// A detuned copy uses two crossfaded fractional taps of the main string.
+// It runs at the 11.025 kHz mix rate and retains no independent bow solver.
+// At most two 250-sample periods plus the two-sample read margin fit in 512.
+struct DetunedCopy {
+    opxy::i16 history[512];
+    u32 position, phase, ratio_key, step, period_key, weight_scale;
+};
+
+// One physical melody string and its detuned copy.
 struct MelodySlot {
     String main;
-    String twin;
+    DetunedCopy twin;
 };
 
 // The drone strings play once for the whole machine (see render_drone).

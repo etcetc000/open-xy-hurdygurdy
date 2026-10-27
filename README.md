@@ -1,11 +1,11 @@
 # Hurdy Gurdy
 
-A standalone Open-XY SDK 1.0 migration of Hurdy Gurdy by
+A standalone Open-XY SDK 1.3 machine based on Hurdy Gurdy by
 [SammiBabe666](https://github.com/SammiBabe666), the original instrument author.
 See [AUDIT.md](AUDIT.md) for scope, findings and validation, and
 [PROVENANCE.md](PROVENANCE.md) for source attribution and [LICENSE](LICENSE)
 for the recorded distribution permission.
-CI pins SDK commit `e8fc2a13bca715079f722df5a23426fac6b8f30b`.
+Validation uses SDK commit `09e5b94faf21751e1357e2311e2afa82fddd4275` (OS 1.2.1).
 
 A bowed-string synth. Each note bows a melody string (the chanterelle) with a
 friction model of a rosined wheel. Three drone strings (bourdon, mouche and
@@ -19,7 +19,7 @@ Everything passes through a three-mode soundbox.
 | Blue | **Wheel**: bow speed; faster is brighter and stronger | **Rosin**: grip; low is airy, high is gritty |
 | Green | **Buzz**: chien sensitivity; above half it buzzes all the time | **Coup**: wrist strokes; up to 40% one stroke on each note, above that repeating strokes from 1.5 to 9 Hz, restarted by each note |
 | White | **Body**: soundbox from small and bright to large and warm | **Drone**: drone level, 0 is off |
-| Orange | **Unison**: a second chanterelle; joins by 12%, then detunes up to 22 cents | **Tonic**: the drone key (C to B) |
+| Orange | **Unison**: a detuned copy of the chanterelle; joins by 12%, then detunes up to 22 cents | **Tonic**: the drone key (C to B) |
 
 Each encoder toggles between two parameters when pressed. Tonic remains in
 saved parameter slot 7; moving its encoder preserves preset and project values.
@@ -54,12 +54,19 @@ python ../open-xy/sdk.py check
 
 Each string is a digital waveguide split at the wheel: a neck line (wheel to
 nut) and a bridge line (wheel to bridge), with the wheel at 11% of the string.
-The bridge reflection passes a symmetric three-tap loss filter. The bridge
+The bridge reflection passes a symmetric three-tap loss filter with power-of-two
+coefficients: 31/32 DC gain and quantized curvature, implemented with shifts. The bridge
 side holds whole samples and the neck side the fraction, so each string
-sample needs one interpolated tap. Melody and Unison run at 22.05 kHz, while
-the three drones and soundbox run at 11.025 kHz. A half-band filter decimates
-the melody before mixing; the final signal is interpolated to 44.1 kHz.
-The feedback strings and nonlinear bow interaction remain physical models.
+sample needs one interpolated tap. The melody runs at 22.05 kHz; the
+three drones, Unison copy and soundbox run at 11.025 kHz. A half-band filter
+decimates the melody before mixing; the final signal is interpolated to 44.1 kHz.
+Unison uses two crossfaded fractional delay taps, one melody period apart,
+to shift the main string by up to 22 cents. It shares the main string's bow
+noise and harmonic evolution instead of simulating another independently bowed
+string. The copy has a short, pitch-dependent delay; attacks and beating differ
+from the physical twin. Its history resets when Unison is re-enabled.
+The main string and all three drones retain their physical feedback and
+nonlinear bow interaction. Fractional delay interpolation is retained for tuning.
 The reduced rates change brightness and intonation: the tuning regression
 allows eight cents across 81 sustained melody probes from 110 to 1,760 Hz.
 Friction follows the STK bowed-string curve, clip((u + 0.75)^-4, 0.01, 0.98),
@@ -77,27 +84,25 @@ Notes below about 44 Hz fold up an octave.
   lengths, pitch-to-period division only when the sampled pitch changes.
   No 64-bit helpers. Unison gain uses unsigned constant division to avoid a
   software division helper inside the sample loop.
-- Delay lines store Q15 words. A melody slot (chanterelle and twin) is about 2.34 KiB;
+- Delay lines store Q15 words. A melody slot (chanterelle and detuned-copy history) is about 2.19 KiB;
   eight slots are shared by every track through `LeasePool`, so at most eight
   melody notes sound at once and a ninth takes the oldest note's strings. That
   also bounds the engine's worst-case CPU.
-- Memory: 22,976 bytes shared plus 92 bytes per voice (128 voices).
+- Memory: 21,792 bytes shared plus 92 bytes per voice (128 voices).
 - Internal mixing stays in Q15 until the public Q31 output boundary. The
   half-band decimator uses four history values held in registers. The string
   solver is compiled once in `strings.cpp`, with a constant-fraction path for
-  settled pitch. These changes preserve the original arithmetic and rounding.
-- Per sample, a sounding note costs one string (two with Unison) and the
-  soundbox. The drones cost three strings once for the whole machine, only
+  settled pitch. The shift-based loss filter intentionally changes damping and rounding.
+- Per sample, a sounding note costs one physical melody string and the
+  soundbox; Unison adds a feed-forward delay resampler. The drones cost three strings once for the whole machine, only
   while Drone or Buzz is above zero. With only Buzz audible, bourdon and
   mouche pause after their level fades to zero, then resume when Drone rises.
   The chien runs only while Buzz is up. A voice whose strings were taken
   and that holds no drones does no work.
 - Output is limited below 0.3, the declared peak.
-- A user-reported device fixture measured about 29.7k synthesis cycles and
-  33.8k whole-voice cycles before this native optimization pass. The current
-  candidate needs a new device comparison; host instruction equivalents do
-  not predict those cycle counts. See [the audit](AUDIT.md) for the fixture
-  and validation details.
+- Device CPU must be measured for this revision with the SDK profiling build.
+  The source base (PR #147, `b1366c2`) measured 4.741% median whole-voice
+  benchmark cost on OS 1.2.1. That is a baseline, not this revision's result.
   Drone ownership still needs correction before release.
 
 ## Development
@@ -114,7 +119,11 @@ retriggers. The interpolation and friction tests check numeric accuracy;
 motion and geometry keys. Drone idle/resume and sustained tuning have
 additional regression tests. `tests/decimation.cpp` compares the optimized
 filter with a full seven-tap FIR; `tests/string_kernel.cpp` compares settled
-and moving delays with the original scalar solver, including index wrapping.
+and moving delays with an independent scalar specification of the quantized
+loss filter, including index wrapping. `tests/detuned_copy.cpp` checks the
+copy's frequency over 18 pitch/detune combinations; `tests/detuned_transitions.cpp`
+checks storage bounds, full-range automation, index wrap, constant gain and
+silence drain.
 CI also runs these with undefined-behavior
 sanitization and compiles the native module.
 

@@ -2,8 +2,8 @@
 #include <cstdio>
 #include <cstring>
 
-// Scalar v1.0.0 reference: always recompute each fractional tap. The optimized
-// solver must match both its samples and complete delay-line state.
+// Scalar reference for the quantized loss filter: always recompute each tap.
+// The optimized solver must match samples and complete delay-line state.
 namespace reference {
 using namespace hurdygurdy;
 const u32 q12 = 4096, neck_mask = neck_size - 1, bridge_mask = bridge_size - 1;
@@ -17,7 +17,8 @@ inline void bow_string(String& s, i32* out, const i32* bow, const u32* periods, 
     u32 at = s.position;
     i32 loss_1 = s.loss_1, loss_2 = s.loss_2;
     u32 neck_now = s.neck_delay, bridge_now = s.bridge_delay;
-    const i32 side = b.side, centre = b.centre, slope = b.slope;
+    const i32 slope = b.slope;
+    const i32 divisor = b.side < 192 ? 256 : b.side < 384 ? 128 : b.side < 768 ? 64 : 32;
     const bool steady = periods[0] == periods[1] && periods[0] == periods[2] && periods[0] == periods[3];
     const u32 span = steady ? Frames : Frames / 4;
     const u32 parts = steady ? 1u : 4u;
@@ -43,7 +44,11 @@ inline void bow_string(String& s, i32* out, const i32* bow, const u32* periods, 
         for (u32 n = 0; n < span; ++n) {
             neck_now = static_cast<u32>(static_cast<i32>(neck_now) + neck_step);
             const i32 arriving = bridge[(at - bridge_whole) & bridge_mask];
-            const i32 lossy = (side * (arriving + loss_2) + centre * loss_1) >> 15;
+            // Explicit floor division independently specifies signed rounding.
+            const i32 gain = loss_1 / 32 - (loss_1 < 0 && loss_1 % 32 != 0);
+            const i32 curvature = arriving + loss_2 - 2 * loss_1;
+            const i32 correction = curvature / divisor - (curvature < 0 && curvature % divisor != 0);
+            const i32 lossy = loss_1 - gain + correction;
             loss_2 = loss_1;
             loss_1 = arriving;
             const i32 from_bridge = -lossy;
