@@ -91,7 +91,8 @@ Notes below about 44 Hz fold up an octave.
 - Memory: 21,792 bytes shared plus 92 bytes per voice (128 voices).
 - Internal mixing stays in Q15 until the public Q31 output boundary. The
   half-band decimator uses four history values held in registers. The string
-  solver is compiled once in `strings.cpp`, with a constant-fraction path for
+  solver setup lives in `strings.cpp`; the shared sample kernels compile in
+  `string_samples.cpp`, with a constant-fraction path for
   settled pitch. The shift-based loss filter intentionally changes damping and rounding.
 - Drone and Unison mixing, the chien filter and their control smoothing use
   arithmetic shifts for power-of-two scaling. Negative values round down;

@@ -1,6 +1,7 @@
 // Compile with -O2 and the SDK and machine include directories. Host timing only.
 #include "engine.cpp"
 #include "strings.cpp"
+#include "string_samples.cpp"
 #include <chrono>
 #include <cstdio>
 #include <cstring>

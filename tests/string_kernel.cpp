@@ -1,4 +1,5 @@
 #include "strings.cpp"
+#include "string_samples.cpp"
 #include <cstdio>
 #include <cstring>
 

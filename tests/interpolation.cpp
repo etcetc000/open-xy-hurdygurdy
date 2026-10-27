@@ -1,5 +1,6 @@
 #include "engine.cpp"
 #include "strings.cpp"
+#include "string_samples.cpp"
 #include <cstdio>
 
 int main() {

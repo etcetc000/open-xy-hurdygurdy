@@ -1,6 +1,7 @@
 // Portable wall-time benchmark. See AUDIT.md for the separate host-cycle probe.
 #include "engine.cpp"
 #include "strings.cpp"
+#include "string_samples.cpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>

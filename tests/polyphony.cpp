@@ -5,6 +5,7 @@
 // melody lease pool.
 #include "engine.cpp"
 #include "strings.cpp"
+#include "string_samples.cpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

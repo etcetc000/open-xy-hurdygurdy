@@ -49,16 +49,25 @@ The preceding cheaper revision `392f8e6` measured 4.390% median whole-voice
 benchmark cost on OS 1.2.1. This revision has no hardware timing qualification.
 
 An offline control-flow analysis of the native callback, including its SDK
-adapter, gives a conservative bound of 22,416 Blackfin issue packets per
+adapter, gives a conservative bound of 21,665 Blackfin issue packets per
 64-sample block with all features and transitions allowed. With unchanged
 pitch and controls, expired click/gain ramps, active Buzz and Unison and zero
-Drone after its fade, the bound is 12,789. The preceding revision's corresponding
+Drone after its fade, the bound is 12,425. The preceding revision's corresponding
 bounds were 24,636 and 14,384. The model includes direct callees and reviewed
 loop bounds and checks its optimization certificate with rational arithmetic.
 It does not model cache, pipeline or interrupt timing. These are annotated
 packet bounds, not simulated or measured device cycles; the full case remains
-above the 15,000-packet goal. Host tests and native package verification do not
-establish that timing goal or listening quality.
+above the chosen 15,000 estimated-device-cycle goal. The empirical screening
+conversion is 1.65 cycles per packet: the largest ratio from three historical
+C8 captures plus a 10% engineering margin, rounded upward. It estimates 35,748
+cycles for the full case and 20,502 for the settled case. This is not a hardware
+worst-case guarantee or a validated conversion for every workload.
+
+The string sample kernels compile separately from delay setup. Their arithmetic,
+rounding, rates and state transitions are unchanged; the scalar reference test
+compares complete delay-line state and samples.
+Host tests and native package verification do not establish device timing or
+listening quality.
 
 ## Existing drone ownership limitation
 
