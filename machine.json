@@ -10,7 +10,8 @@
   "sdk": "1.3",
   "sources": [
     "strings.cpp",
-    "string_samples.cpp"
+    "string_samples.cpp",
+    "drone_tone.cpp"
   ],
   "presets": "presets"
 }

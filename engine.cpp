@@ -1,13 +1,14 @@
 #include "core.h"
 #include "bowed_string.h"
+#include "drone_tone.h"
 #include <opxy/q31.hpp>
 #include "tables.h"
 
 // Hurdy Gurdy: a bowed-string machine.
 //
 // Each note bows a melody string (the chanterelle) with a friction model
-// of the rosined wheel. Unison adds a detuned copy of that string. Three drone strings
-// (bourdon, mouche, trompette) are bowed once for the whole machine by the
+// of the rosined wheel. Unison adds a detuned copy of that string. Three periodic drone oscillators
+// (bourdon, mouche, trompette) run once for the whole machine under the
 // newest note, so chords never stack drones and the drones carry on from note
 // to note. The trompette rattles the chien (the buzzing bridge) when the
 // wheel is stroked. Everything passes through a three-mode soundbox.
@@ -28,7 +29,6 @@ const u32 q12 = 4096;
 const u32 longest_period = 250u * q12;  // quarter-rate samples; 44.1 Hz lower bound
 const u32 shortest_period = 3u * q12;    // about 3.7 kHz
 const u32 main_position = 113;           // wheel contact, Q10 fraction of the string (0.11)
-const u32 drone_position = 117;
 const u32 segment = 4;                 // pitch updates every 16 device samples
 
 // Control slots in definition.json order: the four encoders (blue, green,
@@ -201,12 +201,6 @@ const i32 rattle_a2 = 706961124;
 inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, bool stroke,
                          i32* bow, i32* work) {
     DroneSet& d = shared.drone;
-    const u32 bourdon = (hg_bourdon_period[c.tonic] / rate_factor);
-    const u32 bourdon_periods[4] = { bourdon, bourdon, bourdon, bourdon };
-    const u32 mouche = bourdon / 3u;     // a twelfth above: just fifth, no beating
-    const u32 mouche_periods[4] = { mouche, mouche, mouche, mouche };
-    const u32 trompette = bourdon / 4u;  // two octaves above
-    const u32 trompette_periods[4] = { trompette, trompette, trompette, trompette };
 
     // Smoothed controls.
     const i32 level_target = c.drone;
@@ -234,12 +228,12 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
         // Bourdon and mouche share one bow speed.
         wheel(bow, d.bow[0], b.speed, 8, d.random, d.noise, b.roughness);
         level = d.level;
-        bow_string(d.bourdon, work, bow, bourdon_periods, drone_position, b, render_frames);
+        drone_tone(d.bourdon, work, bow, c.tonic, 0, c.rosin, c.wheel);
         for (u32 i = 0; i < render_frames; ++i) {
             level += (level_target - level) >> 6;
             shared.drone_block[i] = (work[i] * (((level >> 16) * 3) >> 2)) >> 15;      // 0.75
         }
-        bow_string(d.mouche, work, bow, mouche_periods, drone_position, b, render_frames);
+        drone_tone(d.mouche, work, bow, c.tonic, 1, c.rosin, c.wheel);
         level = d.level;
         for (u32 i = 0; i < render_frames; ++i) {
             level += (level_target - level) >> 6;
@@ -260,7 +254,7 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
         const i32 value = speed + ((speed * (((d.noise >> 17) * b.roughness) >> 13)) >> 15);
         for (u32 k = 0; k < rough_step; ++k) bow[i + k] = value;
     }
-    bow_string(d.trompette, work, bow, trompette_periods, drone_position, b, render_frames);
+    drone_tone(d.trompette, work, bow, c.tonic, 2, c.rosin, c.wheel);
 
     // Chien: the trompette lifts its buzzing bridge when the wheel is stroked
     // (a coup) and, above half Buzz, all the time. Impacts come from the peak

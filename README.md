@@ -8,8 +8,8 @@ for the recorded distribution permission.
 Validation uses SDK commit `09e5b94faf21751e1357e2311e2afa82fddd4275` (OS 1.2.1).
 
 A bowed-string synth. Each note bows a melody string (the chanterelle) with a
-friction model of a rosined wheel. Three drone strings (bourdon, mouche and
-trompette) are bowed once for the whole machine by the newest note, so chords
+friction model of a rosined wheel. Three periodic drone oscillators (bourdon, mouche and
+trompette) run once for the whole machine under the newest note, so chords
 never stack drones and the drones carry on unbroken from note to note. The
 trompette rattles the chien, the buzzing bridge, when the wheel is stroked.
 Everything passes through a three-mode soundbox.
@@ -46,13 +46,14 @@ python ../open-xy/sdk.py check
 | [definition.json](definition.json) | Controls, presets, resources and the drawing shape |
 | [core.h](core.h), [engine.cpp](engine.cpp) | String, drone and voice state; mixing, chien, soundbox |
 | [bowed_string.h](bowed_string.h), [strings.cpp](strings.cpp) | Shared bowed-string solver with settled-delay and moving-delay paths |
+| [drone_tone.cpp](drone_tone.cpp), [drone_waves.h](drone_waves.h) | Periodic drone oscillators and generated wave bank |
 | [tables.h](tables.h) | Friction curve, drone periods, soundbox modes, coup rates, unison ratios, loudness grid, display sine |
 | [display.h](display.h), [display.cpp](display.cpp), [panel.svg.fragment](panel.svg.fragment) | The screen |
 | [machine.json](machine.json) | SDK version, kind, requested identity (engine 36, page 84) and icon |
 
 ## Sound model
 
-Each string is a digital waveguide split at the wheel: a neck line (wheel to
+The melody string is a digital waveguide split at the wheel: a neck line (wheel to
 nut) and a bridge line (wheel to bridge), with the wheel at 11% of the string.
 The bridge reflection passes a symmetric three-tap loss filter with power-of-two
 coefficients: 31/32 DC gain and quantized curvature, implemented with shifts. The bridge
@@ -65,8 +66,13 @@ to shift the main string by up to 22 cents. It shares the main string's bow
 noise and harmonic evolution instead of simulating another independently bowed
 string. The copy has a short, pitch-dependent delay; attacks and beating differ
 from the physical twin. Its history resets when Unison is re-enabled.
-The main string and all three drones retain their physical feedback and
-nonlinear bow interaction. Fractional delay interpolation is retained for tuning.
+The melody retains physical feedback, nonlinear bow interaction and fractional
+interpolation. The drones use 128-point periodic waves generated from that solver
+at both Rosin endpoints for each tonic and drone role. Wave interpolation and
+smoothed Rosin blending preserve continuous phase; bow noise modulates amplitude,
+and Wheel controls amplitude and a simple brightness filter. The chien still
+responds to the trompette, Buzz and Coup. This changes drone attacks, evolution,
+level and control response; the drones no longer simulate string feedback.
 The reduced rates change brightness and intonation: the tuning regression
 allows eight cents across 81 sustained melody probes from 110 to 1,760 Hz.
 Friction follows the STK bowed-string curve, clip((u + 0.75)^-4, 0.01, 0.98),
@@ -88,7 +94,7 @@ Notes below about 44 Hz fold up an octave.
   eight slots are shared by every track through `LeasePool`, so at most eight
   melody notes sound at once and a ninth takes the oldest note's strings. That
   also bounds the engine's worst-case CPU.
-- Memory: 21,792 bytes shared plus 92 bytes per voice (128 voices).
+- Memory: 18,252 bytes shared plus 92 bytes per voice (128 voices).
 - Internal mixing stays in Q15 until the public Q31 output boundary. The
   half-band decimator uses four history values held in registers. The string
   solver setup lives in `strings.cpp`; the shared sample kernels compile in
@@ -98,7 +104,7 @@ Notes below about 44 Hz fold up an octave.
   arithmetic shifts for power-of-two scaling. Negative values round down;
   this avoids signed-division fixups and intentionally changes low-level rounding.
 - Per sample, a sounding note costs one physical melody string and the
-  soundbox; Unison adds a feed-forward delay resampler. The drones cost three strings once for the whole machine, only
+  soundbox; Unison adds a feed-forward delay resampler. The drones cost three table oscillators once for the whole machine, only
   while Drone or Buzz is above zero. With only Buzz audible, bourdon and
   mouche pause after their level fades to zero, then resume when Drone rises.
   The chien runs only while Buzz is up. A voice whose strings were taken
@@ -121,7 +127,8 @@ presets with eight voices, different controls per voice, automation and
 retriggers. The interpolation and friction tests check numeric accuracy;
 `tests/display.cpp` checks frame bounds, initial note snapshots, reduced
 motion and geometry keys. Drone idle/resume and sustained tuning have
-additional regression tests. `tests/decimation.cpp` compares the optimized
+additional regression tests. `tests/drone_wave.cpp` checks all 36 drone
+frequencies, phase wrapping and abrupt control/bow transitions. `tests/decimation.cpp` compares the optimized
 filter with a full seven-tap FIR; `tests/string_kernel.cpp` compares settled
 and moving delays with an independent scalar specification of the quantized
 loss filter, including index wrapping. `tests/detuned_copy.cpp` checks the
@@ -130,6 +137,13 @@ checks storage bounds, full-range automation, index wrap, constant gain and
 silence drain.
 CI also runs these with undefined-behavior
 sanitization and compiles the native module.
+
+`generators/drone_waves.py --sdk <SDK> --scratch <fresh ignored SDK local folder>`
+regenerates the drone bank with a host C++ compiler and NumPy. It captures the
+physical solver, fits a periodic harmonic model, removes DC and limits harmonics
+for each drone's sample rate. The 129th stored point repeats the first point;
+32-bit entries avoid signed-word expansion in the device loop. The wave bank
+uses 37,152 bytes plus 144 bytes for phase increments.
 
 `python generators/friction.py` regenerates the friction curve from
 clip((u + 0.75)^-4, 0.01, 0.98). The nearest-entry approximation changes the

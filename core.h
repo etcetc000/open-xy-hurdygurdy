@@ -42,11 +42,17 @@ struct MelodySlot {
     DetunedCopy twin;
 };
 
-// The drone strings play once for the whole machine (see render_drone).
+// A periodic approximation of a drone string; phase persists across notes.
+struct DroneTone {
+    u32 phase, position;
+    i32 colour, filtered;
+};
+
+// The drones play once for the whole machine (see render_drone).
 struct DroneSet {
-    String bourdon;
-    String mouche;
-    String trompette;
+    DroneTone bourdon;
+    DroneTone mouche;
+    DroneTone trompette;
     i32 bow[3];          // smoothed bow velocity per string
     i32 noise;           // wheel roughness, low-passed
     u32 random;

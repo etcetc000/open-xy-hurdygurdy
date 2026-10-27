@@ -1,4 +1,5 @@
 #include "engine.cpp"
+#include "drone_tone.cpp"
 #include "strings.cpp"
 #include "string_samples.cpp"
 #include <cstdio>
@@ -21,7 +22,7 @@ int main() {
         hurdygurdy::render(voice, shared, 1, output, parameters, pitch);
     require(shared.drone.bourdon.position == 0 && shared.drone.mouche.position == 0,
             "Inaudible tonal drones consume processing time");
-    require(shared.drone.trompette.position != 0, "Buzz lost its physical excitation string");
+    require(shared.drone.trompette.position != 0, "Buzz lost its excitation oscillator");
     parameters[6] = 2147483647;
     for (unsigned block = 0; block < 100; ++block)
         hurdygurdy::render(voice, shared, 1, output, parameters, pitch);
