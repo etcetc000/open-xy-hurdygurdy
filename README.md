@@ -93,6 +93,9 @@ Notes below about 44 Hz fold up an octave.
   half-band decimator uses four history values held in registers. The string
   solver is compiled once in `strings.cpp`, with a constant-fraction path for
   settled pitch. The shift-based loss filter intentionally changes damping and rounding.
+- Drone and Unison mixing, the chien filter and their control smoothing use
+  arithmetic shifts for power-of-two scaling. Negative values round down;
+  this avoids signed-division fixups and intentionally changes low-level rounding.
 - Per sample, a sounding note costs one physical melody string and the
   soundbox; Unison adds a feed-forward delay resampler. The drones cost three strings once for the whole machine, only
   while Drone or Buzz is above zero. With only Buzz audible, bourdon and
@@ -101,7 +104,7 @@ Notes below about 44 Hz fold up an octave.
   and that holds no drones does no work.
 - Output is limited below 0.3, the declared peak.
 - Device CPU must be measured for this revision with the SDK profiling build.
-  The source base (PR #147, `b1366c2`) measured 4.741% median whole-voice
+  The preceding cheaper revision, `392f8e6`, measured 4.390% median whole-voice
   benchmark cost on OS 1.2.1. That is a baseline, not this revision's result.
   Drone ownership still needs correction before release.
 

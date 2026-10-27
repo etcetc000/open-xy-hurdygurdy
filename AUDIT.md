@@ -25,6 +25,13 @@ were tried and rejected because they failed the existing eight-cent tuning limit
 A physical twin at 11.025 kHz was also tried; the detuned copy is the chosen
 lower-cost implementation. Shared state is 21,792 bytes, with 92 bytes per voice.
 
+Drone and Unison mixing, chien filtering and their envelope smoothing use
+arithmetic right shifts for power-of-two scaling. This rounds negative values
+down instead of toward zero. Rates, physical solver, fractional delays and filter
+coefficients are unchanged by this arithmetic optimization; low-level rounding
+and envelope convergence intentionally differ. The source's existing arithmetic
+right-shift requirement remains explicit.
+
 ## Validation and device measurement
 
 Machine tests cover control corners, pitch extremes, declared peak bounds,
@@ -38,8 +45,20 @@ reference specifies the new filter's signed rounding independently.
 The SDK build must authenticate stock/tool inputs, reconstruct the package and
 pass full native release verification. Firmware and captures stay outside every
 checkout. Host timing does not establish device cycles or a 3.5% CPU result.
-The unchanged source baseline measured 4.741% median whole-voice benchmark cost
-on OS 1.2.1; this revision needs three fresh hardware captures and listening review.
+The preceding cheaper revision `392f8e6` measured 4.390% median whole-voice
+benchmark cost on OS 1.2.1. This revision has no hardware timing qualification.
+
+An offline control-flow analysis of the native callback, including its SDK
+adapter, gives a conservative bound of 22,416 Blackfin issue packets per
+64-sample block with all features and transitions allowed. With unchanged
+pitch and controls, expired click/gain ramps, active Buzz and Unison and zero
+Drone after its fade, the bound is 12,789. The preceding revision's corresponding
+bounds were 24,636 and 14,384. The model includes direct callees and reviewed
+loop bounds and checks its optimization certificate with rational arithmetic.
+It does not model cache, pipeline or interrupt timing. These are annotated
+packet bounds, not simulated or measured device cycles; the full case remains
+above the 15,000-packet goal. Host tests and native package verification do not
+establish that timing goal or listening quality.
 
 ## Existing drone ownership limitation
 

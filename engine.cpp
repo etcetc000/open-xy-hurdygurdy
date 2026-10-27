@@ -88,8 +88,8 @@ inline Bowing bowing_of(const Controls& c) {
 inline i32 roughen(u32& random, i32& noise) {
     random = random * 1664525u + 1013904223u;
     const i32 white = static_cast<i32>(random);
-    noise += white / 8 - noise / 8;
-    return noise / 131072;
+    noise += (white >> 3) - (noise >> 3);
+    return noise >> 17;
 }
 
 // Period in Q12 samples from a phase increment; one 32-bit division.
@@ -236,14 +236,14 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
         level = d.level;
         bow_string(d.bourdon, work, bow, bourdon_periods, drone_position, b, render_frames);
         for (u32 i = 0; i < render_frames; ++i) {
-            level += (level_target - level) / 64;
-            shared.drone_block[i] = work[i] * ((level / 65536) * 3 / 4) / 32768;      // 0.75
+            level += (level_target - level) >> 6;
+            shared.drone_block[i] = (work[i] * (((level >> 16) * 3) >> 2)) >> 15;      // 0.75
         }
         bow_string(d.mouche, work, bow, mouche_periods, drone_position, b, render_frames);
         level = d.level;
         for (u32 i = 0; i < render_frames; ++i) {
-            level += (level_target - level) / 64;
-            shared.drone_block[i] += work[i] * ((level / 65536) * 18022 / 32768) / 32768;      // 0.55
+            level += (level_target - level) >> 6;
+            shared.drone_block[i] += (work[i] * (((level >> 16) * 18022) >> 15)) >> 15;      // 0.55
         }
     } else {
         for (u32 i = 0; i < render_frames; ++i) shared.drone_block[i] = 0;
@@ -273,8 +273,8 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
     const i32 sensitivity = buzz_target >= 858993459 ? maximum : buzz_target + buzz_target + buzz_target / 2;
     level = d.level;
     for (u32 i = 0; i < render_frames; ++i) {
-        level += (level_target - level) / 64;
-        buzz += (buzz_target - buzz) / 64;
+        level += (level_target - level) >> 6;
+        buzz += (buzz_target - buzz) >> 6;
         if (rate) {
             const u32 before = d.coup_phase;
             d.coup_phase += rate * rate_factor;
@@ -282,24 +282,24 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
         }
         d.coup = multiply(d.coup, coup_decay);
         const i32 t = work[i];
-        i32 out = t * (level / 131072) / 32768;                          // 0.50
+        i32 out = (t * (level >> 17)) >> 15;                          // 0.50
         if (chien) {
             const i32 lift_target = add(steady, multiply(d.coup, sensitivity));
-            d.lift += (lift_target - d.lift) / 8;
-            d.envelope += (magnitude(t) - d.envelope) / 16;
-            i32 peak = t - d.envelope / 2;
+            d.lift += (lift_target - d.lift) >> 3;
+            d.envelope += (magnitude(t) - d.envelope) >> 4;
+            i32 peak = t - (d.envelope >> 1);
             if (peak < 0) peak = 0;
             const i32 impact = peak - d.rectified;
             d.rectified = peak;
             const i32 rough = roughen(d.random, d.noise);
-            const i32 jagged = clamp(impact + impact * (rough * 2) / 32768, -32767, 32767);
+            const i32 jagged = clamp(impact + ((impact * (rough * 2)) >> 15), -32767, 32767);
             const i32 rattle = clamp(((rattle_b0 / 131072) * jagged + (rattle_a1 / 131072) * d.rattle_1
-                                - (rattle_a2 / 131072) * d.rattle_2) / 8192, -32767, 32767);
+                                - (rattle_a2 / 131072) * d.rattle_2) >> 13, -32767, 32767);
             d.rattle_2 = d.rattle_1;
             d.rattle_1 = rattle;
             // The rasp is loud on a real gurdy: lift the resonator 30 dB.
-            const i32 loudness = 1073741824 + buzz / 2;                  // 0.5 .. 1 with Buzz
-            const i32 chatter = clamp((rattle * (d.lift / 65536) / 32768) * (loudness / 65536) / 32768, -204, 204);
+            const i32 loudness = 1073741824 + (buzz >> 1);                  // 0.5 .. 1 with Buzz
+            const i32 chatter = clamp((((rattle * (d.lift >> 16)) >> 15) * (loudness >> 16)) >> 15, -204, 204);
             out += chatter * 16;                                   // peak 0.1
         }
         shared.drone_block[i] = clamp(shared.drone_block[i] + out, -32767, 32767);
@@ -484,17 +484,17 @@ static void render_internal(Voice& voice, Shared& shared, u32 owner, opxy::Outpu
                 const i32 gain = voice.twin_gain;
                 const i32 attenuation = static_cast<i32>(static_cast<u32>(gain) / 3u);
                 for (u32 i = 0; i < render_frames; ++i) {
-                    const i32 together = clamp(output[i] + work[i] * (gain / 65536) / 32768, -32767, 32767);
-                    output[i] = together - together * (attenuation / 65536) / 32768;
+                    const i32 together = clamp(output[i] + ((work[i] * (gain >> 16)) >> 15), -32767, 32767);
+                    output[i] = together - ((together * (attenuation >> 16)) >> 15);
                 }
             } else {
                 for (u32 i = 0; i < render_frames; ++i) {
-                    voice.twin_gain += (twin_target - voice.twin_gain) / 64;
-                    const i32 together = clamp(output[i] + work[i] * (voice.twin_gain / 65536) / 32768, -32767, 32767);
+                    voice.twin_gain += (twin_target - voice.twin_gain) >> 6;
+                    const i32 together = clamp(output[i] + ((work[i] * (voice.twin_gain >> 16)) >> 15), -32767, 32767);
                     // The gain is nonnegative. Unsigned division by three uses
                     // constant arithmetic on Blackfin instead of a runtime helper.
                     const i32 attenuation = static_cast<i32>(static_cast<u32>(voice.twin_gain) / 3u);
-                    output[i] = together - together * (attenuation / 65536) / 32768;
+                    output[i] = together - ((together * (attenuation >> 16)) >> 15);
                 }
             }
         }
@@ -532,7 +532,7 @@ static void render_internal(Voice& voice, Shared& shared, u32 owner, opxy::Outpu
                 ? (voice.drone_gain < maximum - 19479880 ? 19479880 : maximum - voice.drone_gain)  // 10 ms
                 : (voice.drone_gain > 19479880 ? -19479880 : -voice.drone_gain);
             if (fresh) output[i] = clamp(output[i]
-                + shared.drone_block[i] * (voice.drone_gain / 65536) / 32768,
+                + ((shared.drone_block[i] * (voice.drone_gain >> 16)) >> 15),
                 -32767, 32767);
         }
     }
