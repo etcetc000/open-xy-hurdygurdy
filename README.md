@@ -27,6 +27,11 @@ on the stepped bar and the other smaller and grey. Labels and tonic captions
 are lowercase, matching Macro Osc. Tonic remains in saved parameter slot 7;
 all parameter order, presets and audio behavior are preserved.
 
+The default preset is **Chanterelle**: Wheel 55, Body 50, Rosin 45 and tonic C,
+with Buzz, Coup, Drone and Unison at zero. `presets/default.json` explicitly
+provides this single bowed melody string; the twelve named presets also ship
+with builder packages.
+
 The drones are tuned in just intonation from the tonic: bourdon in G1 to F#2,
 mouche a twelfth above (3:1), trompette two octaves above (4:1). They sound
 while any note on the machine sounds; for a hands-free drone, use the OP-XY's

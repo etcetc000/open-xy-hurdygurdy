@@ -3,7 +3,7 @@ on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 env:
-  SDK_REF: 09e5b94faf21751e1357e2311e2afa82fddd4275
+  SDK_REF: 7910129d7b390d4161899a5a4e45483ed01431ec
 jobs:
   preview-and-tests:
     runs-on: ubuntu-latest
