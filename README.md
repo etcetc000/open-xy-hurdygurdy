@@ -146,7 +146,9 @@ sanitization and compiles the native module.
 regenerates the drone bank with a host C++ compiler and NumPy. It captures the
 physical solver, fits a periodic harmonic model, removes DC and limits harmonics
 for each drone's sample rate. The 129th stored point repeats the first point;
-32-bit entries avoid signed-word expansion in the device loop. The wave bank
+32-bit entries avoid signed-word expansion in the device loop. Each phase point
+stores its two Rosin endpoints together, so interpolation shares address calculations.
+The wave bank
 uses 37,152 bytes plus 144 bytes for phase increments.
 
 `python generators/friction.py` regenerates the friction curve from
