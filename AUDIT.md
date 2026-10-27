@@ -59,8 +59,12 @@ matching input controls and output gain do not imply matching perceived loudness
 The SDK build must authenticate stock/tool inputs, reconstruct the package and
 pass full native release verification. Firmware and captures stay outside every
 checkout. Host timing does not establish device cycles or a 3.5% CPU result.
-The preceding cheaper revision `392f8e6` measured 4.390% median whole-voice
-benchmark cost on OS 1.2.1. This revision has no hardware timing qualification.
+The half-rate parent `86fe3d8` measured 3.558404% median whole-voice C8
+benchmark cost and 16,542.27 median timer-3 callback cycles across three runs
+on OS 1.2.1. The earlier cheaper revision `392f8e6` measured 4.390% whole voice.
+Those are historical measurements, not a hardware timing qualification of this
+combined exact-division and display-fix build. Device metadata identifies normal
+OS 1.2.1 but does not attest the installed firmware hash.
 
 An offline control-flow analysis of the native callback, including its SDK
 adapter, gives a conservative bound of 14,289 Blackfin issue packets per
@@ -75,12 +79,16 @@ arithmetic.
 It does not model cache, pipeline or interrupt timing. These are annotated
 packet bounds, not simulated or measured device cycles; the full case remains
 above the chosen 15,000 estimated-device-cycle goal. The empirical screening
-conversion is 1.65 cycles per packet: the largest ratio from three historical
-C8 captures plus a 10% engineering margin, rounded upward. It estimates 23,577
-cycles for the full case and 16,329 for the settled case. This is not a hardware
-worst-case guarantee or a validated conversion for every workload. The new drone
-algorithm and wave-bank memory layout are outside the calibration's measured
-builds; the conversion is only a comparison estimate pending device validation.
+conversion is 1.85 cycles per packet: the largest ratio from four historical
+C8 builds plus a 10% engineering margin, rounded upward. It estimates 26,435
+cycles for the full case and 18,308 for the settled case. The previous 1.65
+factor underpredicted the half-rate parent's 16,542.27-cycle median with an
+estimate of 16,314. This failed held-out prediction remains a failure after
+refitting; the conversion is a screening estimate, not independently validated
+across algorithm changes or a worst-case timing guarantee. The selected sub-15k
+estimated-cycle target is not achieved. Native packets and device cycles are
+separate metrics. The display fix changes no audio code.
+
 
 Unison activation clears 512 Q15 samples directly instead of a byte-at-a-time
 structure clear. The chien loop compiles separately, and its two lift additions

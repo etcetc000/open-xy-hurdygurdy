@@ -118,10 +118,15 @@ Notes below about 44 Hz fold up an octave.
   The chien loop compiles separately; lift sums use nonnegative saturation.
   These changes preserve sample arithmetic and add no shared/voice storage.
 - Output is limited below 0.3, the declared peak.
-- Device CPU must be measured for this revision with the SDK profiling build.
-  The preceding cheaper revision, `392f8e6`, measured 4.390% median whole-voice
-  benchmark cost on OS 1.2.1. That is a baseline, not this revision's result.
-  Drone ownership still needs correction before release.
+- The half-rate parent `86fe3d8` measured 3.558404% median whole-voice C8
+  benchmark cost and 16,542 callback cycles. This combined exact-division and
+  display-fix build has no hardware timing qualification; the sub-15,000
+  estimated-cycle target remains unmet. See [AUDIT.md](AUDIT.md) for the
+  recalibrated offline estimate and the failed held-out prediction.
+- Animated melody and Unison strings use narrow closed outlines with fixed
+  ends to avoid retraced-stroke spikes. Device confirmation remains pending.
+- The existing drone ownership limitation remains documented in AUDIT.md.
+
 
 ## Development
 
