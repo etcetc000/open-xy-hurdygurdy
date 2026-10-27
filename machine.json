@@ -12,7 +12,8 @@
     "strings.cpp",
     "string_samples.cpp",
     "drone_tone.cpp",
-    "chien.cpp"
+    "chien.cpp",
+    "control_division.cpp"
   ],
   "presets": "presets"
 }

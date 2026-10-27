@@ -1,5 +1,6 @@
 // Portable wall-time benchmark. See AUDIT.md for the separate host-cycle probe.
 #include "engine.cpp"
+#include "control_division.cpp"
 #include "chien.cpp"
 #include "drone_tone.cpp"
 #include "strings.cpp"

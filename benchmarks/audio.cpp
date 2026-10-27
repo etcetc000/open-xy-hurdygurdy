@@ -1,5 +1,6 @@
 // Compile with -O2 and the SDK and machine include directories. Host timing only.
 #include "engine.cpp"
+#include "control_division.cpp"
 #include "chien.cpp"
 #include "drone_tone.cpp"
 #include "strings.cpp"

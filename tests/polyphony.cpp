@@ -4,6 +4,7 @@
 // inside the declared peak and that sounding work stays bounded by the
 // melody lease pool.
 #include "engine.cpp"
+#include "control_division.cpp"
 #include "chien.cpp"
 #include "drone_tone.cpp"
 #include "strings.cpp"

@@ -1,5 +1,6 @@
 // Offline A/B renderer. Compile against either machine's include directory.
 #include "engine.cpp"
+#include "control_division.cpp"
 #include "strings.cpp"
 #include "string_samples.cpp"
 #include <cstdio>

@@ -63,21 +63,21 @@ The preceding cheaper revision `392f8e6` measured 4.390% median whole-voice
 benchmark cost on OS 1.2.1. This revision has no hardware timing qualification.
 
 An offline control-flow analysis of the native callback, including its SDK
-adapter, gives a conservative bound of 15,030 Blackfin issue packets per
+adapter, gives a conservative bound of 14,289 Blackfin issue packets per
 64-sample block with all features and transitions allowed. With unchanged
 pitch and controls, expired click/gain ramps, active Buzz and Unison and zero
-Drone after its fade, the bound is 9,887. The paired-wave parent `121ef34`,
-analyzed with the same operand and phase bounds, gives 17,101 and 11,059.
-The half-rate drone section removes 2,071 full-case packets and 1,172 settled
-packets. This is an audible rate/bandwidth tradeoff. The model includes direct callees
+Drone after its fade, the bound is 9,896. The half-rate drone parent `86fe3d8`,
+analyzed with the same operand and phase bounds, gives 15,030 and 9,887.
+Exact control quotients remove 741 full-case packets; compiler layout adds
+nine settled packets. This refactoring preserves sound and state. The model includes direct callees
 and reviewed loop bounds and checks its optimization certificate with rational
 arithmetic.
 It does not model cache, pipeline or interrupt timing. These are annotated
 packet bounds, not simulated or measured device cycles; the full case remains
 above the chosen 15,000 estimated-device-cycle goal. The empirical screening
 conversion is 1.65 cycles per packet: the largest ratio from three historical
-C8 captures plus a 10% engineering margin, rounded upward. It estimates 24,800
-cycles for the full case and 16,314 for the settled case. This is not a hardware
+C8 captures plus a 10% engineering margin, rounded upward. It estimates 23,577
+cycles for the full case and 16,329 for the settled case. This is not a hardware
 worst-case guarantee or a validated conversion for every workload. The new drone
 algorithm and wave-bank memory layout are outside the calibration's measured
 builds; the conversion is only a comparison estimate pending device validation.
@@ -92,14 +92,21 @@ pitch/control changes and Unison restarts, under undefined-behavior sanitization
 
 The drone wave bank interleaves its two Rosin endpoints at each phase point to
 share address calculations. Its size remains 37,152 bytes. Half-rate phase steps
-double and the regenerated waves retain fewer harmonics; this branch is not
-sample-equivalent to its parent. All 36 sustained drone tuning probes remain
+double and the regenerated waves retain fewer harmonics than `121ef34`.
+All 36 sustained drone tuning probes remain
 within eight cents (largest measured error 5.01 cents). Melody tuning remains
 within six cents across 81 probes. Existing Unison and scalar solver tests pass.
 
-The analysis limits divider iterations from their actual operand ranges:
-26 for pitch conversion, 11 for detune ratio, 23 for window weights and 7 for
-phase reduction. Coup phase can wrap at most once in eight drone samples because its
+Pitch and Unison-window division use a 256-entry reciprocal seed table, two
+Q31 refinement steps and a one-step remainder correction. Every divisor in
+their callback domains is checked exhaustively against unsigned integer
+division, including under undefined-behavior sanitization. The 828 detune
+quotients are precomputed exactly. Total constant storage is 2,680 bytes, with
+no new voice/shared state. A separately compiled 32,768-callback trace matches
+all output samples and final state against `86fe3d8` under UBSan.
+
+Only phase reduction still uses the SDK divider; its actual operand ranges
+bound it to seven steps. Coup phase can wrap at most once in eight drone samples because its
 maximum total increment is below 2^32. These are reviewed source invariants tied
 to the native graph, not device cycle measurements.
 

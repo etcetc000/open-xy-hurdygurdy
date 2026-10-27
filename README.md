@@ -89,9 +89,12 @@ Notes below about 44 Hz fold up an octave.
 ## Native notes
 
 - 32-bit arithmetic only: Q15 audio/filter state, Q31 control envelopes, Q12 delay
-  lengths, pitch-to-period division only when the sampled pitch changes.
+  lengths, pitch-to-period conversion only when the sampled pitch changes.
   No 64-bit helpers. Unison gain uses unsigned constant division to avoid a
   software division helper inside the sample loop.
+- Pitch periods and Unison crossfade weights use exact reciprocal-based quotients;
+  a 1 KiB seed table, two refinements and one correction replace the software
+  divider. The detune step uses a 1,656-byte exact table. Neither adds state.
 - Delay lines store Q15 words. A melody slot (chanterelle and detuned-copy history) is about 2.19 KiB;
   eight slots are shared by every track through `LeasePool`, so at most eight
   melody notes sound at once and a ninth takes the oldest note's strings. That
@@ -140,6 +143,8 @@ loss filter, including index wrapping. `tests/detuned_copy.cpp` checks the
 copy's frequency over 18 pitch/detune combinations; `tests/detuned_transitions.cpp`
 checks storage bounds, full-range automation, index wrap, constant gain and
 silence drain.
+`tests/division_exact.cpp` checks every supported divisor: 16,777,152 pitch,
+63,233 window-weight and 828 detune-step values against ordinary division.
 CI also runs these with undefined-behavior
 sanitization and compiles the native module.
 
@@ -159,6 +164,8 @@ level coefficients are cached until their controls change.
 `python generators/rates.py` regenerates the body/chien poles and envelope
 decays at the soundbox's quarter rate and the chien's eighth rate from the original coefficients in
 `generators/filter_reference.json`.
+`python generators/reciprocal_seeds.py` regenerates the exact integer reciprocal
+seeds and detune quotients from their declared domains.
 
 `benchmarks/audio.cpp` times one and eight voices with melody, unison, drones,
 all features, and unison switched off. Compile with `-std=c++11 -O2`,

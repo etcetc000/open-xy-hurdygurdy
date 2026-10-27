@@ -2,6 +2,7 @@
 #include "bowed_string.h"
 #include "drone_tone.h"
 #include "chien.h"
+#include "control_division.h"
 #include <opxy/q31.hpp>
 #include "tables.h"
 
@@ -77,11 +78,11 @@ inline Bowing bowing_of(const Controls& c) {
     return b;
 }
 
-// Period in Q12 samples from a phase increment; one 32-bit division.
+// Period in Q12 samples from a phase increment; exact fixed-numerator quotient.
 inline u32 period_of(u32 increment) {
     u32 divisor = increment >> 8;
     if (divisor < 64) divisor = 64;
-    u32 period = (0xffffffffu / divisor) << 2;   // quarter-rate period in Q12
+    u32 period = divide_phase_period(divisor) << 2;   // quarter-rate period in Q12
     while (period > longest_period) period >>= 1;
     return period < shortest_period ? shortest_period : period;
 }
@@ -134,14 +135,14 @@ inline void detuned_copy(DetunedCopy& s, i32* out, const i32* input, i32 ratio, 
     const u32 key = static_cast<u32>(ratio);
     if (s.ratio_key != key) {
         const u32 denominator = key >> 15;
-        s.step = ((65536u - denominator) << 16) / denominator;
+        s.step = detune_step(denominator);
         s.ratio_key = key;
     }
     u32 phase = s.phase, at = s.position;
     for (u32 part = 0; part < 4; ++part) {
         const u32 window = periods[part] << 5; // two Q12 periods -> Q16
         if (s.period_key != periods[part]) {
-            s.weight_scale = 0x80000000u / (window >> 9);
+            s.weight_scale = divide_window_weight(window >> 9);
             s.period_key = periods[part];
             if (phase >= window) phase %= window;
         }
