@@ -61,5 +61,47 @@ int main() {
             if (std::memcmp(previous.paths[p].points, frame.paths[p].points, sizeof(frame.paths[p].points)) != 0)
                 require(previous.paths[p].key != frame.paths[p].key, "Changed geometry reused a cached key");
     }
-    std::puts("Display: bounded frames, initial note snapshot, reduced motion and geometry keys passed");
+    display_reset(state);
+    input = {};
+    input.track = 2;
+    input.reduced_motion = 1;
+    for (unsigned i=0;i<8;++i) input.slots[i]=2147483647;
+    for (unsigned i=0;i<4;++i) input.shown[i]=i;
+    display(state,input,frame);
+    require(std::strcmp(frame.texts[0].chars,"wheel")==0
+            && std::strcmp(frame.texts[8].chars,"rosin")==0,
+            "Page one labels or case changed");
+    require(std::strcmp(frame.texts[4].chars,"100")==0
+            && std::strcmp(frame.texts[15].chars,"b")==0,
+            "Header must show amounts and lowercase tonic names");
+    require(frame.texts[0].y==10*1024 && frame.texts[8].y==33*1024
+            && frame.nodes[46].y==0,"Page one row layout changed");
+    for (unsigned i=0;i<4;++i) input.shown[i]=i+4;
+    input.reduced_motion=0;
+    input.elapsed=17;
+    display(state,input,frame);
+    require(state.header_since==0,"Page change did not start its transition");
+    for(unsigned i=0;i<12;++i) {
+        display(state,input,frame);
+        require(opxy::draw::valid(frame),"Invalid header transition frame");
+    }
+    require(std::strcmp(frame.texts[0].chars,"rosin")==0
+            && std::strcmp(frame.texts[8].chars,"wheel")==0,
+            "Page two labels or case changed");
+    require(frame.texts[0].y==28*1024 && frame.texts[8].y==13*1024
+            && frame.nodes[46].y==18*1024,"Rows must keep their page order");
+    require(std::strcmp(frame.texts[7].chars,"b")==0,"Active tonic caption changed");
+    input.shown[0]=0;
+    input.reduced_motion=1;
+    display(state,input,frame);
+    require(state.header_since==header_rows::kSettle && frame.nodes[46].y==0,
+            "Reduced motion must settle immediately");
+    input.reduced_motion=0;
+    input.shown[0]=4;
+    display(state,input,frame);
+    ++input.track;
+    display(state,input,frame);
+    require(state.header_since==header_rows::kSettle && frame.nodes[46].y==18*1024,
+            "Track change must settle the new page immediately");
+    std::puts("Display: bounded strings, lowercase header rows, page transitions and reduced motion passed");
 }

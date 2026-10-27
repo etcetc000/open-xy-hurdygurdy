@@ -21,3 +21,8 @@ provenance; the audit retains that finding.
 The standalone player, installer, PDFs, recordings and preset files remain
 outside this source repository. The twelve parameter presets in
 `definition.json` are part of the imported machine source.
+
+The two-row control header (header_rows.h and the header portion of
+panel.svg.fragment) is adapted from Open-XY core machines' Macro Osc,
+Copyright (c) 2026 Open-XY contributors, under the MIT license in LICENSE.header.
+This notice applies to those additions and does not relicense the original instrument.

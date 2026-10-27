@@ -1,4 +1,33 @@
 <g id="hurdygurdy_panel">
+    <!-- Black from the top: it covers the stock header, which this machine draws itself. -->
+    <rect x="0" y="0" width="480" height="220" fill="#000000"/>
+    <!-- The header bar's eight steps, behind the page being edited. -->
+    <path id="hurdygurdy_node_46" transform="matrix(1 0 0 1 0 0)" d="M0,0 L60,0 L60,20 L0,20 Z" fill="#000000" stroke="#000000" stroke-width="0.5"/>
+    <path id="hurdygurdy_node_47" transform="matrix(1 0 0 1 60 0)" d="M0,0 L60,0 L60,20 L0,20 Z" fill="#323232" stroke="#323232" stroke-width="0.5"/>
+    <path id="hurdygurdy_node_48" transform="matrix(1 0 0 1 120 0)" d="M0,0 L60,0 L60,20 L0,20 Z" fill="#4B4B4B" stroke="#4B4B4B" stroke-width="0.5"/>
+    <path id="hurdygurdy_node_49" transform="matrix(1 0 0 1 180 0)" d="M0,0 L60,0 L60,20 L0,20 Z" fill="#646464" stroke="#646464" stroke-width="0.5"/>
+    <path id="hurdygurdy_node_50" transform="matrix(1 0 0 1 240 0)" d="M0,0 L60,0 L60,20 L0,20 Z" fill="#7D7D7D" stroke="#7D7D7D" stroke-width="0.5"/>
+    <path id="hurdygurdy_node_51" transform="matrix(1 0 0 1 300 0)" d="M0,0 L60,0 L60,20 L0,20 Z" fill="#969696" stroke="#969696" stroke-width="0.5"/>
+    <path id="hurdygurdy_node_52" transform="matrix(1 0 0 1 360 0)" d="M0,0 L60,0 L60,20 L0,20 Z" fill="#AFAFAF" stroke="#AFAFAF" stroke-width="0.5"/>
+    <path id="hurdygurdy_node_53" transform="matrix(1 0 0 1 420 0)" d="M0,0 L60,0 L60,20 L0,20 Z" fill="#CDCDCD" stroke="#CDCDCD" stroke-width="0.5"/>
+    <!-- The page being edited in the bar's colours, its titles then its values; then the other page in grey. -->
+    <text id="hurdygurdy_text_0" transform="matrix(1 0 0 1 5 10)" fill="#CBCBCB" font-family="UniversNextPro-Light" font-size="10px">wheel</text>
+    <text id="hurdygurdy_text_1" transform="matrix(1 0 0 1 125 10)" fill="#CBCBCB" font-family="UniversNextPro-Light" font-size="10px">buzz</text>
+    <text id="hurdygurdy_text_2" transform="matrix(1 0 0 1 245 10)" fill="#000000" font-family="UniversNextPro-Light" font-size="10px">body</text>
+    <text id="hurdygurdy_text_3" transform="matrix(1 0 0 1 365 10)" fill="#000000" font-family="UniversNextPro-Light" font-size="10px">unison</text>
+    <text id="hurdygurdy_text_4" transform="matrix(1 0 0 1 65 17.4)" fill="#CBCBCB" font-family="UniversNextPro-Light" font-size="20px">55</text>
+    <text id="hurdygurdy_text_5" transform="matrix(1 0 0 1 185 17.4)" fill="#CBCBCB" font-family="UniversNextPro-Light" font-size="20px">0</text>
+    <text id="hurdygurdy_text_6" transform="matrix(1 0 0 1 305 17.4)" fill="#000000" font-family="UniversNextPro-Light" font-size="20px">50</text>
+    <text id="hurdygurdy_text_7" transform="matrix(1 0 0 1 425 17.4)" fill="#000000" font-family="UniversNextPro-Light" font-size="20px">0</text>
+    <text id="hurdygurdy_text_8" transform="matrix(1 0 0 1 5 33)" fill="#5A5A5A" font-family="UniversNextPro-Light" font-size="10px">rosin</text>
+    <text id="hurdygurdy_text_9" transform="matrix(1 0 0 1 125 33)" fill="#5A5A5A" font-family="UniversNextPro-Light" font-size="10px">coup</text>
+    <text id="hurdygurdy_text_10" transform="matrix(1 0 0 1 245 33)" fill="#5A5A5A" font-family="UniversNextPro-Light" font-size="10px">drone</text>
+    <text id="hurdygurdy_text_11" transform="matrix(1 0 0 1 365 33)" fill="#5A5A5A" font-family="UniversNextPro-Light" font-size="10px">tonic</text>
+    <text id="hurdygurdy_text_12" transform="matrix(1 0 0 1 65 33)" fill="#707070" font-family="UniversNextPro-Light" font-size="13px">50</text>
+    <text id="hurdygurdy_text_13" transform="matrix(1 0 0 1 185 33)" fill="#707070" font-family="UniversNextPro-Light" font-size="13px">0</text>
+    <text id="hurdygurdy_text_14" transform="matrix(1 0 0 1 305 33)" fill="#707070" font-family="UniversNextPro-Light" font-size="13px">50</text>
+    <text id="hurdygurdy_text_15" transform="matrix(1 0 0 1 425 33)" fill="#707070" font-family="UniversNextPro-Light" font-size="13px">c</text>
+
   <!-- Soundbox (Body), its two sound holes, tailpiece and the wheel opening. -->
   <path id="hurdygurdy_node_4" transform="matrix(1 0 0 1 640 120)" d="M104,-20 L95.88,-20.5 L87.75,-21.98 L79.62,-24.38 L71.5,-27.62 L63.38,-31.56 L55.25,-36.05 L47.12,-40.93 L39,-46 L30.88,-51.07 L22.75,-55.95 L14.62,-60.44 L6.5,-64.38 L-1.62,-67.62 L-9.75,-70.02 L-17.88,-71.5 L-26,-72 L-30.71,-71.85 L-35.4,-71.38 L-40.05,-70.62 L-44.63,-69.55 L-49.14,-68.18 L-53.55,-66.52 L-57.84,-64.57 L-62,-62.35 L-66,-59.87 L-69.83,-57.12 L-73.47,-54.13 L-76.91,-50.91 L-80.13,-47.47 L-83.12,-43.83 L-85.87,-40 L-88.35,-36 L-90.57,-31.84 L-92.52,-27.55 L-94.18,-23.14 L-95.55,-18.63 L-96.62,-14.05 L-97.38,-9.4 L-97.85,-4.71 L-98,-0 L-97.85,4.71 L-97.38,9.4 L-96.62,14.05 L-95.55,18.63 L-94.18,23.14 L-92.52,27.55 L-90.57,31.84 L-88.35,36 L-85.87,40 L-83.12,43.83 L-80.13,47.47 L-76.91,50.91 L-73.47,54.13 L-69.83,57.12 L-66,59.87 L-62,62.35 L-57.84,64.57 L-53.55,66.52 L-49.14,68.18 L-44.63,69.55 L-40.05,70.62 L-35.4,71.38 L-30.71,71.85 L-26,72 L-17.88,71.5 L-9.75,70.02 L-1.62,67.62 L6.5,64.38 L14.62,60.44 L22.75,55.95 L30.88,51.07 L39,46 L47.12,40.93 L55.25,36.05 L63.38,31.56 L71.5,27.62 L79.62,24.38 L87.75,21.98 L95.88,20.5 L104,20 Z" fill="#0E0E0E" stroke="#5C5C5C" stroke-width="2" stroke-linejoin="round"/>
   <circle id="hurdygurdy_node_5" transform="matrix(1 0 0 1 640 120)" cx="0" cy="0" r="6" fill="#0A0A0A" stroke="#444444" stroke-width="1.5"/>

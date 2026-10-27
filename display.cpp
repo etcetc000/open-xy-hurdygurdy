@@ -1,4 +1,5 @@
 #include "display.h"
+#include "header_rows.h"
 #include <opxy/q31.hpp>
 #include "tables.h"
 
@@ -124,6 +125,8 @@ inline void display_reset(DisplayState& state) {
     state.wheel_phase = state.kink_phase = state.twin_offset = state.coup_phase = 0;
     state.frame = state.next_key = state.spare = 0;
     state.activity = state.pulse = 0;
+    state.header_page = 0;
+    state.header_since = header_rows::kSettle;
     for (u32 k = 0; k < 8; ++k) state.key_age[k] = expired;
 }
 
@@ -251,10 +254,11 @@ inline void display(DisplayState& state, const opxy::draw::Input& input, Frame& 
     // ---- Tonic letter: whiter while the orange knob edits it ----
     const u32 letter_shade = tonic_knob ? line_white : drone_knob || d >= 4 ? line_light : line_dark;
     for (u32 k = 0; k < 7; ++k) {
-        if (k == tonic_letter[tonic]) at(frame, letter_first + k, 444, 52, letter_shade, stroke);
+        if (k == tonic_letter[tonic]) at(frame, letter_first + k, 444, 62, letter_shade, stroke);
         else hide(frame, letter_first + k);
     }
-    if (tonic_flat[tonic]) at(frame, flat, 466, 40, letter_shade, stroke);
+    if (tonic_flat[tonic]) at(frame, flat, 466, 50, letter_shade, stroke);
     else hide(frame, flat);
+    header_rows::render(state, input, frame);
 }
 }  // namespace hurdygurdy

@@ -5,7 +5,7 @@ A standalone Open-XY SDK 1.3 machine based on Hurdy Gurdy by
 See [AUDIT.md](AUDIT.md) for scope, findings and validation, and
 [PROVENANCE.md](PROVENANCE.md) for source attribution and [LICENSE](LICENSE)
 for the recorded distribution permission.
-Validation uses SDK commit `09e5b94faf21751e1357e2311e2afa82fddd4275` (OS 1.2.1).
+Validation uses SDK commit `7910129d7b390d4161899a5a4e45483ed01431ec` (OS 1.2.1).
 
 A bowed-string synth. Each note bows a melody string (the chanterelle) with a
 friction model of a rosined wheel. Three periodic drone oscillators (bourdon, mouche and
@@ -14,15 +14,18 @@ never stack drones and the drones carry on unbroken from note to note. The
 trompette rattles the chien, the buzzing bridge, when the wheel is stroked.
 Everything passes through a three-mode soundbox.
 
-| Encoder | Turn | Press, then turn |
+| Encoder | Page 1 | Page 2 |
 | --- | --- | --- |
 | Blue | **Wheel**: bow speed; faster is brighter and stronger | **Rosin**: grip; low is airy, high is gritty |
 | Green | **Buzz**: chien sensitivity; above half it buzzes all the time | **Coup**: wrist strokes; up to 40% one stroke on each note, above that repeating strokes from 1.5 to 9 Hz, restarted by each note |
 | White | **Body**: soundbox from small and bright to large and warm | **Drone**: drone level, 0 is off |
 | Orange | **Unison**: a detuned copy of the chanterelle; joins by 12%, then detunes up to 22 cents | **Tonic**: the drone key (C to B) |
 
-Each encoder toggles between two parameters when pressed. Tonic remains in
-saved parameter slot 7; moving its encoder preserves preset and project values.
+Pressing any encoder switches all four controls between the two pages. Both
+rows stay visible: page 1 above page 2, with the active row large and bright
+on the stepped bar and the other smaller and grey. Labels and tonic captions
+are lowercase, matching Macro Osc. Tonic remains in saved parameter slot 7;
+all parameter order, presets and audio behavior are preserved.
 
 The drones are tuned in just intonation from the tonic: bourdon in G1 to F#2,
 mouche a twelfth above (3:1), trompette two octaves above (4:1). They sound
@@ -49,7 +52,7 @@ python ../open-xy/sdk.py check
 | [chien.cpp](chien.cpp) | Shared buzzing bridge and drone mixing loop |
 | [drone_tone.cpp](drone_tone.cpp), [drone_waves.h](drone_waves.h) | Periodic drone oscillators and generated wave bank |
 | [tables.h](tables.h) | Friction curve, drone periods, soundbox modes, coup rates, unison ratios, loudness grid, display sine |
-| [display.h](display.h), [display.cpp](display.cpp), [panel.svg.fragment](panel.svg.fragment) | The screen |
+| [display.h](display.h), [display.cpp](display.cpp), [header_rows.h](header_rows.h), [panel.svg.fragment](panel.svg.fragment) | The instrument drawing and two-row control header |
 | [machine.json](machine.json) | SDK version, kind, requested identity (engine 36, page 84) and icon |
 
 ## Sound model

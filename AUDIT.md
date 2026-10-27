@@ -3,6 +3,13 @@
 This branch starts from PR #147's `b1366c21a9ccbc0221ba4d326461b0c9c5904bdb`.
 Original authorship and distribution permission remain in PROVENANCE.md and LICENSE.
 The public machine name, parameter order, encoder pairs and twelve presets are unchanged.
+Pressing any encoder now switches both control rows together, using the Macro Osc
+two-page header: fixed row order, active-row emphasis and lowercase captions.
+Header transitions settle within 0.15 seconds; reduced motion and track changes
+snap to the final layout. Display state is 88 bytes, with 54 nodes and 16 text slots.
+This UI change uses SDK 7910129d7b390d4161899a5a4e45483ed01431ec for drawing above
+the stock header. Earlier native cost counts below describe the locked audio
+build; they are not a fresh cycle qualification of this newer SDK build.
 
 ## Sound and cost
 
