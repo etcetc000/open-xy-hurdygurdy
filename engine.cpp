@@ -1,6 +1,7 @@
 #include "core.h"
 #include "bowed_string.h"
 #include "drone_tone.h"
+#include "chien.h"
 #include <opxy/q31.hpp>
 #include "tables.h"
 
@@ -37,14 +38,6 @@ enum { wheel_slot, buzz_slot, body_slot, unison_slot, rosin_slot, coup_slot, dro
 
 inline i32 normalized(i32 value) { return value < 0 ? 0 : value; }
 inline i32 clamp(i32 value, i32 low, i32 high) { return value < low ? low : value > high ? high : value; }
-inline i32 magnitude(i32 value) { return value < 0 ? -value : value; }
-
-// Saturating add: amplitudes stay well inside Q31, this only guards extremes.
-inline i32 add(i32 a, i32 b) {
-    const i32 sum = static_cast<i32>(static_cast<u32>(a) + static_cast<u32>(b));
-    if (((a ^ sum) & (b ^ sum)) < 0) return a < 0 ? -maximum : maximum;
-    return sum;
-}
 
 // Linear interpolation through a 33-entry table indexed by a Q31 control.
 template <class T>
@@ -82,14 +75,6 @@ inline Bowing bowing_of(const Controls& c) {
     b.centre = 31948 - b.side - b.side;                   // DC gain 0.975
     b.roughness = (64424509 + multiply(c.rosin, 429496730)) / 65536; // 0.03 .. 0.23
     return b;
-}
-
-// Wheel noise: Q31 LCG/filter state, Q15 output, about 220 Hz at quarter rate.
-inline i32 roughen(u32& random, i32& noise) {
-    random = random * 1664525u + 1013904223u;
-    const i32 white = static_cast<i32>(random);
-    noise += (white >> 3) - (noise >> 3);
-    return noise >> 17;
 }
 
 // Period in Q12 samples from a phase increment; one 32-bit division.
@@ -140,6 +125,11 @@ inline void melody_string(String& s, i32* out, const i32* bow, const u32* period
 // Pitch-synchronous delay ramps: the two read heads are one input period
 // apart, reducing cancellation and pitch sidebands during their crossfade.
 // The main string still supplies the physical bow and harmonic evolution.
+inline void clear_copy(DetunedCopy& s) {
+    for (u32 i = 0; i < 512; ++i) s.history[i] = 0;
+    s.position = s.phase = s.ratio_key = s.step = s.period_key = s.weight_scale = 0;
+}
+
 inline void detuned_copy(DetunedCopy& s, i32* out, const i32* input, i32 ratio, const u32* periods) {
     const u32 key = static_cast<u32>(ratio);
     if (s.ratio_key != key) {
@@ -191,11 +181,7 @@ inline void wheel(i32* bow, i32& smooth, i32 target, u32 shift, u32& random, i32
 // ---- Drones and chien ----------------------------------------------------
 
 const i32 drone_bow_limit = 150323855;   // 0.07: keeps coup surges inside range
-const i32 coup_decay = 2144489075;       // 65 ms wrist-stroke envelope
 const i32 note_coup_share = 858993459;   // coup 0..0.4: note-start strokes only
-const i32 rattle_b0 = 183390350;          // chien resonator, 2.2 kHz, Q 3 (halved)
-const i32 rattle_a1 = 543188326;
-const i32 rattle_a2 = 706961124;
 
 // Renders the drone block into shared.drone_block with this voice's controls.
 inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, bool stroke,
@@ -256,50 +242,7 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
     }
     drone_tone(d.trompette, work, bow, c.tonic, 2, c.rosin, c.wheel);
 
-    // Chien: the trompette lifts its buzzing bridge when the wheel is stroked
-    // (a coup) and, above half Buzz, all the time. Impacts come from the peak
-    // of each swing, so the buzz is pitched with the trompette.
-    i32 buzz = d.buzz;
-    const bool chien = buzz_target > 0 || buzz > 0;
-    // Steady lift above Buzz 0.45, full at 1; coup sensitivity full by 0.4.
-    const i32 steady = buzz_target <= 966367642 ? 0
-        : add(buzz_target - 966367642, buzz_target - 966367642);
-    const i32 sensitivity = buzz_target >= 858993459 ? maximum : buzz_target + buzz_target + buzz_target / 2;
-    level = d.level;
-    for (u32 i = 0; i < render_frames; ++i) {
-        level += (level_target - level) >> 6;
-        buzz += (buzz_target - buzz) >> 6;
-        if (rate) {
-            const u32 before = d.coup_phase;
-            d.coup_phase += rate * rate_factor;
-            if (d.coup_phase < before && d.coup < 1717986918) d.coup = 1717986918;  // 0.8
-        }
-        d.coup = multiply(d.coup, coup_decay);
-        const i32 t = work[i];
-        i32 out = (t * (level >> 17)) >> 15;                          // 0.50
-        if (chien) {
-            const i32 lift_target = add(steady, multiply(d.coup, sensitivity));
-            d.lift += (lift_target - d.lift) >> 3;
-            d.envelope += (magnitude(t) - d.envelope) >> 4;
-            i32 peak = t - (d.envelope >> 1);
-            if (peak < 0) peak = 0;
-            const i32 impact = peak - d.rectified;
-            d.rectified = peak;
-            const i32 rough = roughen(d.random, d.noise);
-            const i32 jagged = clamp(impact + ((impact * (rough * 2)) >> 15), -32767, 32767);
-            const i32 rattle = clamp(((rattle_b0 / 131072) * jagged + (rattle_a1 / 131072) * d.rattle_1
-                                - (rattle_a2 / 131072) * d.rattle_2) >> 13, -32767, 32767);
-            d.rattle_2 = d.rattle_1;
-            d.rattle_1 = rattle;
-            // The rasp is loud on a real gurdy: lift the resonator 30 dB.
-            const i32 loudness = 1073741824 + (buzz >> 1);                  // 0.5 .. 1 with Buzz
-            const i32 chatter = clamp((((rattle * (d.lift >> 16)) >> 15) * (loudness >> 16)) >> 15, -204, 204);
-            out += chatter * 16;                                   // peak 0.1
-        }
-        shared.drone_block[i] = clamp(shared.drone_block[i] + out, -32767, 32767);
-    }
-    d.level = level;
-    d.buzz = buzz;
+    render_chien(d, shared.drone_block, work, level_target, buzz_target, rate);
 }
 
 // ---- Soundbox and output ----------------------------------------------
@@ -470,7 +413,7 @@ static void render_internal(Voice& voice, Shared& shared, u32 owner, opxy::Outpu
         // unison string switched off does not consume CPU for the whole note.
         if (twin_target == 0 && voice.twin_gain < 64) voice.twin_gain = 0;
         if (twin_target > 0 || voice.twin_gain > 0) {
-            if (voice.twin_gain == 0) slot->twin = DetunedCopy{};
+            if (voice.twin_gain == 0) clear_copy(slot->twin);
             const i32 ratio = lookup33(hg_twin_ratio, c.unison);
             detuned_copy(slot->twin, work, output, ratio, periods);
             if ((twin_target - voice.twin_gain) / 64 == 0) {

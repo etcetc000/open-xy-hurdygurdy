@@ -46,6 +46,7 @@ python ../open-xy/sdk.py check
 | [definition.json](definition.json) | Controls, presets, resources and the drawing shape |
 | [core.h](core.h), [engine.cpp](engine.cpp) | String, drone and voice state; mixing, chien, soundbox |
 | [bowed_string.h](bowed_string.h), [strings.cpp](strings.cpp) | Shared bowed-string solver with settled-delay and moving-delay paths |
+| [chien.cpp](chien.cpp) | Shared buzzing bridge and drone mixing loop |
 | [drone_tone.cpp](drone_tone.cpp), [drone_waves.h](drone_waves.h) | Periodic drone oscillators and generated wave bank |
 | [tables.h](tables.h) | Friction curve, drone periods, soundbox modes, coup rates, unison ratios, loudness grid, display sine |
 | [display.h](display.h), [display.cpp](display.cpp), [panel.svg.fragment](panel.svg.fragment) | The screen |
@@ -109,6 +110,9 @@ Notes below about 44 Hz fold up an octave.
   mouche pause after their level fades to zero, then resume when Drone rises.
   The chien runs only while Buzz is up. A voice whose strings were taken
   and that holds no drones does no work.
+- Unison history is cleared with a bounded 512-sample loop on activation.
+  The chien loop compiles separately; lift sums use nonnegative saturation.
+  These changes preserve sample arithmetic and add no shared/voice storage.
 - Output is limited below 0.3, the declared peak.
 - Device CPU must be measured for this revision with the SDK profiling build.
   The preceding cheaper revision, `392f8e6`, measured 4.390% median whole-voice
@@ -156,7 +160,10 @@ decays at quarter rate from the original coefficients in
 `benchmarks/audio.cpp` times one and eight voices with melody, unison, drones,
 all features, and unison switched off. Compile with `-std=c++11 -O2`,
 `-I../open-xy/sdk/include -I.`, placing the executable in the SDK local folder.
-It also reproduces the outstanding drone-owner ordering issue. Host timing
+`benchmarks/trace_callback.cpp`, linked with the machine's declared sources,
+records deterministic automated callbacks and final state for exact refactoring
+comparisons. `benchmarks/audio.cpp` also reproduces the outstanding drone-owner
+ordering issue. Host timing
 is diagnostic and has no pass/fail performance threshold.
 `benchmarks/corners.cpp` extends this to 2,816 settings: continuous-control
 corners, eight pitch inputs including extremes, segment pitch modulation,

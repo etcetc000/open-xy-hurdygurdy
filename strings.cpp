@@ -5,7 +5,7 @@ namespace hurdygurdy {
 void settled_samples(String&, i32*, const i32*, u32, u32, i32, const Bowing&);
 void moving_samples(String&, i32*, const i32*, u32, u32, i32, const Bowing&);
 
-// One shared native implementation serves the melody and three drones.
+// One shared native implementation serves settled and changing melody pitch.
 // Only 16- and 32-frame calls are used; all delay divisions stay constant.
 void bow_string(String& s, i32* out, const i32* bow, const u32* periods,
                 u32 position_q10, const Bowing& b, u32 frames) {

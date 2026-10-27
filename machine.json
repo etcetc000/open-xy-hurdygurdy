@@ -11,7 +11,8 @@
   "sources": [
     "strings.cpp",
     "string_samples.cpp",
-    "drone_tone.cpp"
+    "drone_tone.cpp",
+    "chien.cpp"
   ],
   "presets": "presets"
 }

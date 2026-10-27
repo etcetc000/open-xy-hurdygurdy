@@ -59,21 +59,37 @@ The preceding cheaper revision `392f8e6` measured 4.390% median whole-voice
 benchmark cost on OS 1.2.1. This revision has no hardware timing qualification.
 
 An offline control-flow analysis of the native callback, including its SDK
-adapter, gives a conservative bound of 19,540 Blackfin issue packets per
+adapter, gives a conservative bound of 17,419 Blackfin issue packets per
 64-sample block with all features and transitions allowed. With unchanged
 pitch and controls, expired click/gain ramps, active Buzz and Unison and zero
-Drone after its fade, the bound is 11,828. The physical-drone parent `8f7e073` has corresponding
-bounds of 21,665 and 12,425. The model includes direct callees and reviewed
-loop bounds and checks its optimization certificate with rational arithmetic.
+Drone after its fade, the bound is 11,165. The periodic-drone parent `b19c279`,
+analyzed with the same operand and phase bounds, gives 18,590 and 11,783. Its
+earlier looser graph gave 19,540 and 11,828; that model refinement is separate
+from the code's 1,171-packet full-case saving. The model includes direct callees
+and reviewed loop bounds and checks its optimization certificate with rational
+arithmetic.
 It does not model cache, pipeline or interrupt timing. These are annotated
 packet bounds, not simulated or measured device cycles; the full case remains
 above the chosen 15,000 estimated-device-cycle goal. The empirical screening
 conversion is 1.65 cycles per packet: the largest ratio from three historical
-C8 captures plus a 10% engineering margin, rounded upward. It estimates 32,241
-cycles for the full case and 19,517 for the settled case. This is not a hardware
+C8 captures plus a 10% engineering margin, rounded upward. It estimates 28,742
+cycles for the full case and 18,423 for the settled case. This is not a hardware
 worst-case guarantee or a validated conversion for every workload. The new drone
 algorithm and wave-bank memory layout are outside the calibration's measured
 builds; the conversion is only a comparison estimate pending device validation.
+
+Unison activation clears 512 Q15 samples directly instead of a byte-at-a-time
+structure clear. The chien loop compiles separately, and its two lift additions
+saturate nonnegative operands. Rates, arithmetic results and state size are
+unchanged. A deterministic 32,768-callback host comparison matches all output
+samples and final machine/voice state against `b19c279`, including full-range
+pitch/control changes and Unison restarts, under undefined-behavior sanitization.
+
+The analysis limits divider iterations from their actual operand ranges:
+26 for pitch conversion, 11 for detune ratio, 23 for window weights and 7 for
+phase reduction. Coup phase can wrap at most once in 16 samples because its
+maximum total increment is below 2^32. These are reviewed source invariants tied
+to the native graph, not device cycle measurements.
 
 The string sample kernels compile separately from delay setup. Their arithmetic,
 rounding, rates and state transitions are unchanged; the scalar reference test
