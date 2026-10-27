@@ -15,13 +15,13 @@ inline i32 add_positive(i32 a, i32 b) {
 inline i32 roughen(u32& random, i32& noise) {
     random = random * 1664525u + 1013904223u;
     const i32 white = static_cast<i32>(random);
-    noise += (white >> 3) - (noise >> 3);
+    noise += opxy::q31::multiply((white >> 1) - (noise >> 1), 1006632960);
     return noise >> 17;
 }
-const i32 coup_decay = 2144489075;       // 65 ms wrist-stroke envelope
-const i32 rattle_b0 = 183390350;          // chien resonator, 2.2 kHz, Q 3 (halved)
-const i32 rattle_a1 = 543188326;
-const i32 rattle_a2 = 706961124;
+const i32 coup_decay = 2141498678;       // 65 ms wrist-stroke envelope
+const i32 rattle_b0 = 304136180;          // chien resonator, 2.2 kHz, Q 3 (halved)
+const i32 rattle_a1 = -1139132209;
+const i32 rattle_a2 = 465469464;
 } // namespace chien_detail
 void render_chien(DroneSet& d, i32* mixed, const i32* work,
                   i32 level_target, i32 buzz_target, u32 rate) {
@@ -36,12 +36,12 @@ void render_chien(DroneSet& d, i32* mixed, const i32* work,
         : chien_detail::add_positive(buzz_target - 966367642, buzz_target - 966367642);
     const i32 sensitivity = buzz_target >= 858993459 ? chien_detail::maximum : buzz_target + buzz_target + buzz_target / 2;
     level = d.level;
-    for (u32 i = 0; i < render_frames; ++i) {
-        level += (level_target - level) >> 6;
-        buzz += (buzz_target - buzz) >> 6;
+    for (u32 i = 0; i < drone_frames; ++i) {
+        level += opxy::q31::multiply(level_target - level, 66584576);
+        buzz += opxy::q31::multiply(buzz_target - buzz, 66584576);
         if (rate) {
             const u32 before = d.coup_phase;
-            d.coup_phase += rate * rate_factor;
+            d.coup_phase += rate * drone_rate_factor;
             if (d.coup_phase < before && d.coup < 1717986918) d.coup = 1717986918;  // 0.8
         }
         d.coup = opxy::q31::multiply(d.coup, chien_detail::coup_decay);
@@ -49,8 +49,8 @@ void render_chien(DroneSet& d, i32* mixed, const i32* work,
         i32 out = (t * (level >> 17)) >> 15;                          // 0.50
         if (chien) {
             const i32 lift_target = chien_detail::add_positive(steady, opxy::q31::multiply(d.coup, sensitivity));
-            d.lift += (lift_target - d.lift) >> 3;
-            d.envelope += (chien_detail::magnitude(t) - d.envelope) >> 4;
+            d.lift += opxy::q31::multiply(lift_target - d.lift, 503316480);
+            d.envelope += ((chien_detail::magnitude(t) - d.envelope) * 31) >> 8;
             i32 peak = t - (d.envelope >> 1);
             if (peak < 0) peak = 0;
             const i32 impact = peak - d.rectified;

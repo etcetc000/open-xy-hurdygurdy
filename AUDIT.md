@@ -7,13 +7,17 @@ The public machine name, parameter order, encoder pairs and twelve presets are u
 ## Sound and cost
 
 The main melody string retains the physical bowed-string solver at 22.05 kHz.
-The three shared drones are periodic table oscillators at 11.025 kHz. Their
+The three shared drones are periodic table oscillators at 5.5125 kHz. Their
 128-point waves come from the physical solver at both Rosin endpoints for all
 12 tonics and three roles. Harmonic fitting removes DC and limits bandwidth;
 wave phase continues across notes. Rosin blends two waveforms with smoothing,
 bow velocity/noise modulates amplitude, and Wheel controls a brightness filter.
 The chien still receives the trompette waveform and the existing Coup envelope.
-Drone attacks, evolution, level and knob response intentionally change. The
+The chien also runs at 5.5125 kHz with retuned resonator poles and envelope
+decays; bow roughness retains its 2.76 kHz clock. The eight-sample drone mix
+is interpolated to the 11.025 kHz soundbox rate. The wave bank excludes harmonics
+above the new Nyquist limit. Drone attacks, brightness, evolution, level and
+knob response intentionally change. The
 physical melody and the existing Unison implementation are unchanged.
 A symmetric, quantized three-tap loss filter uses shifts instead of coefficient
 multiplies. It keeps one sample of filter delay and has 31/32 DC gain; damping
@@ -30,7 +34,7 @@ All rendered waves remain Q15 with 32-bit intermediates. Fractional interpolatio
 remains in the physical solver and the detuned copy. Nearest-sample delay reads
 were tried and rejected because they failed the existing eight-cent tuning limit.
 A physical twin at 11.025 kHz was also tried; the detuned copy is the chosen
-lower-cost implementation. Shared state is 18,252 bytes, with 92 bytes per voice.
+lower-cost implementation. Shared state is 18,256 bytes, with 92 bytes per voice.
 
 Drone and Unison mixing, chien filtering and their envelope smoothing use
 arithmetic right shifts for power-of-two scaling. This rounds negative values
@@ -59,21 +63,21 @@ The preceding cheaper revision `392f8e6` measured 4.390% median whole-voice
 benchmark cost on OS 1.2.1. This revision has no hardware timing qualification.
 
 An offline control-flow analysis of the native callback, including its SDK
-adapter, gives a conservative bound of 17,101 Blackfin issue packets per
+adapter, gives a conservative bound of 15,030 Blackfin issue packets per
 64-sample block with all features and transitions allowed. With unchanged
 pitch and controls, expired click/gain ramps, active Buzz and Unison and zero
-Drone after its fade, the bound is 11,059. The periodic-drone parent `b19c279`,
-analyzed with the same operand and phase bounds, gives 18,590 and 11,783. Its
-earlier looser graph gave 19,540 and 11,828; that model refinement is separate
-from the code's 1,489-packet full-case saving. The model includes direct callees
+Drone after its fade, the bound is 9,887. The paired-wave parent `121ef34`,
+analyzed with the same operand and phase bounds, gives 17,101 and 11,059.
+The half-rate drone section removes 2,071 full-case packets and 1,172 settled
+packets. This is an audible rate/bandwidth tradeoff. The model includes direct callees
 and reviewed loop bounds and checks its optimization certificate with rational
 arithmetic.
 It does not model cache, pipeline or interrupt timing. These are annotated
 packet bounds, not simulated or measured device cycles; the full case remains
 above the chosen 15,000 estimated-device-cycle goal. The empirical screening
 conversion is 1.65 cycles per packet: the largest ratio from three historical
-C8 captures plus a 10% engineering margin, rounded upward. It estimates 28,217
-cycles for the full case and 18,248 for the settled case. This is not a hardware
+C8 captures plus a 10% engineering margin, rounded upward. It estimates 24,800
+cycles for the full case and 16,314 for the settled case. This is not a hardware
 worst-case guarantee or a validated conversion for every workload. The new drone
 algorithm and wave-bank memory layout are outside the calibration's measured
 builds; the conversion is only a comparison estimate pending device validation.
@@ -81,19 +85,21 @@ builds; the conversion is only a comparison estimate pending device validation.
 Unison activation clears 512 Q15 samples directly instead of a byte-at-a-time
 structure clear. The chien loop compiles separately, and its two lift additions
 saturate nonnegative operands. Rates, arithmetic results and state size are
-unchanged. A deterministic 32,768-callback host comparison matches all output
+unchanged by those refactorings. Before the rate reduction, a deterministic
+32,768-callback host comparison matched all output
 samples and final machine/voice state against `b19c279`, including full-range
 pitch/control changes and Unison restarts, under undefined-behavior sanitization.
 
-The drone wave bank interleaves its two Rosin endpoints at each phase point.
-This removes repeated address calculations, preserving every table value,
-interpolation operation, sample and state update. Its size remains 37,152 bytes.
-The generated bank and 32,768-callback exact trace were rechecked for this layout;
-it saves 318 full-case packets (106 per rendered drone).
+The drone wave bank interleaves its two Rosin endpoints at each phase point to
+share address calculations. Its size remains 37,152 bytes. Half-rate phase steps
+double and the regenerated waves retain fewer harmonics; this branch is not
+sample-equivalent to its parent. All 36 sustained drone tuning probes remain
+within eight cents (largest measured error 5.01 cents). Melody tuning remains
+within six cents across 81 probes. Existing Unison and scalar solver tests pass.
 
 The analysis limits divider iterations from their actual operand ranges:
 26 for pitch conversion, 11 for detune ratio, 23 for window weights and 7 for
-phase reduction. Coup phase can wrap at most once in 16 samples because its
+phase reduction. Coup phase can wrap at most once in eight drone samples because its
 maximum total increment is below 2^32. These are reviewed source invariants tied
 to the native graph, not device cycle measurements.
 

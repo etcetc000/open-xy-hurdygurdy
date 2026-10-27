@@ -60,7 +60,8 @@ The bridge reflection passes a symmetric three-tap loss filter with power-of-two
 coefficients: 31/32 DC gain and quantized curvature, implemented with shifts. The bridge
 side holds whole samples and the neck side the fraction, so each string
 sample needs one interpolated tap. The melody runs at 22.05 kHz; the
-three drones, Unison copy and soundbox run at 11.025 kHz. A half-band filter
+Unison copy and soundbox run at 11.025 kHz. The three drones and chien run at
+5.5125 kHz, then interpolate linearly into the soundbox. A half-band filter
 decimates the melody before mixing; the final signal is interpolated to 44.1 kHz.
 Unison uses two crossfaded fractional delay taps, one melody period apart,
 to shift the main string by up to 22 cents. It shares the main string's bow
@@ -95,7 +96,7 @@ Notes below about 44 Hz fold up an octave.
   eight slots are shared by every track through `LeasePool`, so at most eight
   melody notes sound at once and a ninth takes the oldest note's strings. That
   also bounds the engine's worst-case CPU.
-- Memory: 18,252 bytes shared plus 92 bytes per voice (128 voices).
+- Memory: 18,256 bytes shared plus 92 bytes per voice (128 voices).
 - Internal mixing stays in Q15 until the public Q31 output boundary. The
   half-band decimator uses four history values held in registers. The string
   solver setup lives in `strings.cpp`; the shared sample kernels compile in
@@ -156,7 +157,7 @@ clip((u + 0.75)^-4, 0.01, 0.98). The nearest-entry approximation changes the
 sound slightly; it avoids interpolation in every string sample. Body and
 level coefficients are cached until their controls change.
 `python generators/rates.py` regenerates the body/chien poles and envelope
-decays at quarter rate from the original coefficients in
+decays at the soundbox's quarter rate and the chien's eighth rate from the original coefficients in
 `generators/filter_reference.json`.
 
 `benchmarks/audio.cpp` times one and eight voices with melody, unison, drones,

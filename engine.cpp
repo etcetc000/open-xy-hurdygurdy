@@ -184,6 +184,18 @@ const i32 drone_bow_limit = 150323855;   // 0.07: keeps coup surges inside range
 const i32 note_coup_share = 858993459;   // coup 0..0.4: note-start strokes only
 
 // Renders the drone block into shared.drone_block with this voice's controls.
+// Two low-rate bow samples per roughness update retain the 2.76 kHz noise clock.
+inline void drone_wheel(i32* bow, i32& smooth, i32 target, u32& random, i32& noise, i32 roughness) {
+    for (u32 i = 0; i < drone_frames; i += 2) {
+        for (u32 k = 0; k < 2; ++k) smooth += multiply(target - smooth, 16744448);
+        random = random * 1664525u + 1013904223u;
+        noise += (static_cast<i32>(random) >> 1) - (noise >> 1);
+        const i32 speed = smooth >> 16;
+        const i32 value = speed + ((speed * (((noise >> 17) * roughness) >> 13)) >> 15);
+        bow[i] = bow[i+1] = value;
+    }
+}
+
 inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, bool stroke,
                          i32* bow, i32* work) {
     DroneSet& d = shared.drone;
@@ -212,37 +224,46 @@ inline void render_drone(Shared& shared, const Controls& c, const Bowing& b, boo
     const bool tonal = level_target > 0 || d.level > 0;
     if (tonal) {
         // Bourdon and mouche share one bow speed.
-        wheel(bow, d.bow[0], b.speed, 8, d.random, d.noise, b.roughness);
+        drone_wheel(bow, d.bow[0], b.speed, d.random, d.noise, b.roughness);
         level = d.level;
         drone_tone(d.bourdon, work, bow, c.tonic, 0, c.rosin, c.wheel);
-        for (u32 i = 0; i < render_frames; ++i) {
-            level += (level_target - level) >> 6;
+        for (u32 i = 0; i < drone_frames; ++i) {
+            level += multiply(level_target - level, 66584576);
             shared.drone_block[i] = (work[i] * (((level >> 16) * 3) >> 2)) >> 15;      // 0.75
         }
         drone_tone(d.mouche, work, bow, c.tonic, 1, c.rosin, c.wheel);
         level = d.level;
-        for (u32 i = 0; i < render_frames; ++i) {
-            level += (level_target - level) >> 6;
+        for (u32 i = 0; i < drone_frames; ++i) {
+            level += multiply(level_target - level, 66584576);
             shared.drone_block[i] += (work[i] * (((level >> 16) * 18022) >> 15)) >> 15;      // 0.55
         }
     } else {
-        for (u32 i = 0; i < render_frames; ++i) shared.drone_block[i] = 0;
+        for (u32 i = 0; i < drone_frames; ++i) shared.drone_block[i] = 0;
     }
 
     // Trompette: the current coup surges its bow speed (held for the block).
     const i32 surge = 1073741824 + multiply(d.coup, 966367642);   // 1 .. 1.9, halved
-    for (u32 i = 0; i < render_frames; i += rough_step) {
-        for (u32 k = 0; k < rough_step; ++k) d.bow[2] += (b.speed - d.bow[2]) >> 8;
+    for (u32 i = 0; i < drone_frames; i += 2) {
+        for (u32 k = 0; k < 2; ++k) d.bow[2] += multiply(b.speed - d.bow[2], 16744448);
         const i32 pushed = clamp(multiply(d.bow[2], surge) * 2, 0, drone_bow_limit);
         d.random = d.random * 1664525u + 1013904223u;
         d.noise += (static_cast<i32>(d.random) >> 1) - (d.noise >> 1);
         const i32 speed = pushed >> 16;
         const i32 value = speed + ((speed * (((d.noise >> 17) * b.roughness) >> 13)) >> 15);
-        for (u32 k = 0; k < rough_step; ++k) bow[i + k] = value;
+        for (u32 k = 0; k < 2; ++k) bow[i + k] = value;
     }
     drone_tone(d.trompette, work, bow, c.tonic, 2, c.rosin, c.wheel);
 
     render_chien(d, shared.drone_block, work, level_target, buzz_target, rate);
+    // Expand in reverse so the compact eight-sample mix is not overwritten.
+    const i32 last = shared.drone_block[drone_frames - 1];
+    for (u32 i = drone_frames; i != 0; --i) {
+        const i32 current = shared.drone_block[i - 1];
+        const i32 previous = i == 1 ? d.output_previous : shared.drone_block[i - 2];
+        shared.drone_block[2*i - 2] = previous + ((current - previous) >> 1);
+        shared.drone_block[2*i - 1] = current;
+    }
+    d.output_previous = last;
 }
 
 // ---- Soundbox and output ----------------------------------------------

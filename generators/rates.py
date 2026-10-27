@@ -9,13 +9,13 @@ reference = json.loads((root / "generators/filter_reference.json").read_text())
 factor = 4
 
 
-def resonator(values):
+def resonator(values, rate_factor=4):
     _, a1, a2 = values  # Stored coefficients are halved Q31 values.
     radius = math.sqrt(2 * a2 / 2**31)
     angle = math.acos((a1 / 2**31) / radius)
-    radius = radius**factor
+    radius = radius**rate_factor
     return [round((1 - radius * radius) * 2**31 / 4),
-            round(radius * math.cos(angle * factor) * 2**31),
+            round(radius * math.cos(angle * rate_factor) * 2**31),
             round(radius * radius * 2**31 / 2)]
 
 
@@ -32,14 +32,18 @@ if count != 1:
     raise SystemExit("Expected one soundbox table")
 path.write_text(source)
 
-constants = dict(zip(("rattle_b0", "rattle_a1", "rattle_a2"), resonator(reference["rattle"])))
-constants.update({name: round((value / 2**31)**(64 if name == "click_decay" else factor) * 2**31)
+constants = dict(zip(("rattle_b0", "rattle_a1", "rattle_a2"), resonator(reference["rattle"], 8)))
+constants.update({name: round((value / 2**31)**(64 if name == "click_decay" else 8 if name == "coup_decay" else factor) * 2**31)
                   for name, value in reference["decays"].items()})
-path = root / "engine.cpp"
-source = path.read_text()
-for name, value in constants.items():
-    source, count = re.subn(r"(const i32 " + name + r" = )-?\d+",
-                            lambda match: match[1] + str(value), source)
-    if count != 1:
-        raise SystemExit("Expected one constant: " + name)
-path.write_text(source)
+for filename in ("engine.cpp", "chien.cpp"):
+    path = root / filename
+    source = path.read_text()
+    for name, value in constants.items():
+        belongs = "engine.cpp" if name in ("dc_pole", "click_decay") else "chien.cpp"
+        if filename != belongs:
+            continue
+        source, count = re.subn(r"(const i32 " + name + r" = )-?\d+",
+                                lambda match: match[1] + str(value), source)
+        if count != 1:
+            raise SystemExit("Expected one constant: " + name)
+    path.write_text(source)

@@ -11,9 +11,11 @@ using opxy::u32;
 // wheel to the bridge. Lengths fit notes down to about 44 Hz; lower notes
 // fold up an octave. Waves are stored as 16-bit to halve memory and cache
 // traffic; loop arithmetic is Q15 with 32-bit intermediates. Melody runs
-// at half the device rate; drones and the body run at quarter rate.
+// at half the device rate; the body runs at quarter rate and drones at eighth rate.
 const u32 rate_factor = 4;
 const u32 render_frames = opxy::block_frames / rate_factor;
+const u32 drone_rate_factor = 8;
+const u32 drone_frames = opxy::block_frames / drone_rate_factor;
 const u32 neck_size = 512;
 const u32 bridge_size = 64;
 struct String {
@@ -64,6 +66,7 @@ struct DroneSet {
     u32 coup_phase;
     i32 level;           // smoothed drone level
     i32 buzz;            // smoothed chien level
+    i32 output_previous; // half-rate drone mix interpolation history
 };
 
 // At most eight melody notes sound at once across every track; a ninth takes

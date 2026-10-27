@@ -8,11 +8,12 @@ void drone_tone(DroneTone& tone, i32* out, const i32* bow, u32 tonic, u32 role,
     const DroneWavePoint* const wave_pair = drone_waves[key];
     const u32 step = drone_steps[key];
     const i32 target = rosin >> 16;
-    const i32 cutoff = 20000 + (wheel >> 18);
+    const i32 alpha = 20000 + (wheel >> 18);
+    const i32 cutoff = alpha + ((alpha * (32768 - alpha)) >> 15);
     u32 phase = tone.phase;
     i32 colour = tone.colour, filtered = tone.filtered;
-    for (u32 i = 0; i < render_frames; ++i) {
-        colour += (target - colour) >> 6;
+    for (u32 i = 0; i < drone_frames; ++i) {
+        colour += ((target - colour) * 1016) >> 15;
         const DroneWavePoint* const point = wave_pair + (phase >> 25);
         const i32 fraction = static_cast<i32>((phase >> 10) & 32767u);
         const i32 a = point[0].low + (((point[1].low - point[0].low) * fraction) >> 15);
@@ -25,7 +26,7 @@ void drone_tone(DroneTone& tone, i32* out, const i32* bow, u32 tonic, u32 role,
         phase += step;
     }
     tone.phase = phase;
-    tone.position += render_frames;
+    tone.position += drone_frames;
     tone.colour = colour;
     tone.filtered = filtered;
 }

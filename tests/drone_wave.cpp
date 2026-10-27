@@ -15,16 +15,16 @@ int main() {
         for (u32 role = 0; role < 3; ++role) {
             DroneTone tone = {};
             tone.phase = tone.position = 0xfffffff0u;
-            i32 bow[render_frames], out[render_frames];
-            for (u32 i = 0; i < render_frames; ++i) bow[i] = 1064;
+            i32 bow[drone_frames], out[drone_frames];
+            for (u32 i = 0; i < drone_frames; ++i) bow[i] = 1064;
             for (u32 block = 0; block < 512; ++block)
                 drone_tone(tone, out, bow, tonic, role, 1073741824, 1073741824);
             double samples[8192];
-            for (u32 block = 0; block < 512; ++block) {
+            for (u32 block = 0; block < 8192/drone_frames; ++block) {
                 drone_tone(tone, out, bow, tonic, role, 1073741824, 1073741824);
-                for (u32 i = 0; i < render_frames; ++i) samples[block*render_frames+i] = out[i];
+                for (u32 i = 0; i < drone_frames; ++i) samples[block*drone_frames+i] = out[i];
             }
-            const u32 period = (hg_bourdon_period[tonic] / rate_factor) / (role == 0 ? 1 : role == 1 ? 3 : 4);
+            const u32 period = (hg_bourdon_period[tonic] / drone_rate_factor) / (role == 0 ? 1 : role == 1 ? 3 : 4);
             const double expected = period / 4096.0;
             const int centre = static_cast<int>(expected + 0.5);
             double correlations[7];
@@ -50,10 +50,10 @@ int main() {
             // Abrupt control and bow extremes exercise the interpolation,
             // clamp and filter bounds, including phase/position wrap above.
             for (u32 block = 0; block < 2048; ++block) {
-                for (u32 i = 0; i < render_frames; ++i) bow[i] = (block & 1) ? 0 : 4096;
+                for (u32 i = 0; i < drone_frames; ++i) bow[i] = (block & 1) ? 0 : 4096;
                 drone_tone(tone, out, bow, tonic, role,
                            (block & 2) ? 2147483647 : 0, (block & 4) ? 2147483647 : 0);
-                for (u32 i = 0; i < render_frames; ++i)
+                for (u32 i = 0; i < drone_frames; ++i)
                     require(out[i] >= -32767 && out[i] <= 32767, "Drone output exceeds Q15");
             }
         }

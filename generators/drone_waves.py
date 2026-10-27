@@ -33,7 +33,9 @@ for tonic in range(12):
     for role, divisor in enumerate([1,3,4]):
         period_q12=int(periods[tonic])//4//divisor
         nominal=period_q12/4096
-        steps.append(round(2**32/nominal))
+        # Capture remains at 11.025 kHz. Runtime drones use 5.5125 kHz,
+        # so phase advances twice as far and only half the harmonics fit.
+        steps.append(round(2**32/(nominal/2)))
         for colour in range(2):
             x=audio[tonic,role,colour].copy(); x-=x.mean()
             if np.max(np.abs(x))<32: raise ValueError('Silent physical source')
@@ -44,7 +46,7 @@ for tonic in range(12):
             if best==0 or best==len(lags)-1: raise ValueError('Pitch fit at search boundary')
             offset=0.5*(corr[best-1]-corr[best+1])/(corr[best-1]-2*corr[best]+corr[best+1])
             fitted=float(lags[best]+offset)
-            harmonics=np.arange(1,min(63,int(nominal/2))+1)
+            harmonics=np.arange(1,min(63,int(nominal/4))+1)
             # Least-squares harmonic fitting at the measured source period.
             angles=2*np.pi*np.arange(len(x))/fitted
             design=np.column_stack([f(angles*k) for k in harmonics for f in [np.cos,np.sin]])
