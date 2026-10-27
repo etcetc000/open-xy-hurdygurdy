@@ -9,6 +9,28 @@ static void require(bool ok, const char* message) {
 
 int main() {
     using namespace hurdygurdy;
+    // Cover the complete animation cycle, including the two end reversals.
+    // A valid SDK frame alone permits a zero-area retraced stroke, which can
+    // produce endpoint spikes in the device renderer.
+    hurdygurdy::Frame::path_type ribbon = {};
+    for (unsigned amplitude = 0; amplitude <= 6144; amplitude += 6144) {
+        for (unsigned phase = 0; phase < 65536; ++phase) {
+            draw_string(ribbon, phase, static_cast<opxy::i32>(amplitude));
+            for (unsigned i = 0; i < 32; ++i) {
+                const auto& top = ribbon.points[i];
+                const auto& bottom = ribbon.points[63 - i];
+                require(top.x == bottom.x && bottom.y > top.y,
+                        "String ribbon collapsed or crossed itself");
+                require(top.x >= -64 * opxy::draw::unit && top.x <= 64 * opxy::draw::unit,
+                        "String extends past its anchors");
+                if (i) require(top.x > ribbon.points[i - 1].x,
+                               "String ribbon has a reversed or zero-length edge");
+            }
+            require(ribbon.points[0].y == ribbon.points[31].y
+                    && ribbon.points[32].y == ribbon.points[63].y,
+                    "String endpoints move with the kink");
+        }
+    }
     DisplayState state = {};
     hurdygurdy::Frame frame = {};
     opxy::draw::Input input = {};

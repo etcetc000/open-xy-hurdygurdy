@@ -116,6 +116,16 @@ compares complete delay-line state and samples.
 Host tests and native package verification do not establish device timing or
 listening quality.
 
+## Animated string outlines
+
+Melody and Unison drawings use narrow closed ribbons with separated forward
+and return edges. Their strokes meet across the ribbon, retaining a 1.5-pixel
+screen thickness. This avoids the old zero-area retrace and 180-degree endpoint
+reversals; every phase has distinct adjacent vertices and fixed nut/bridge
+anchors. The display regression covers all 65,536 phases at zero and maximum
+amplitude. Device confirmation of the reported endpoint streaking is still
+required. This drawing change does not modify audio sources or controls.
+
 ## Existing drone ownership limitation
 
 `start` marks `claim_pending`; ownership is assigned when `render` encounters it.

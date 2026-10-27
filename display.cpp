@@ -67,17 +67,20 @@ inline void draw_string(Frame::path_type& path, u32 travel, i32 amplitude) {
     const i32 lens = static_cast<i32>((along * (65536u - along)) >> 20); // 0..1024
     i32 height = (amplitude * lens) >> 10;
     if (trip >= 32768u) height = -height;
-    const i32 kink_x = -64 * unit + static_cast<i32>(along * 2u);
-    for (u32 i = 0; i < 16; ++i) {
-        const i32 t = static_cast<i32>(i);
-        path.points[i].x = -64 * unit + ((kink_x + 64 * unit) * t) / 16;
-        path.points[i].y = (height * t) / 16;
-        path.points[16 + i].x = kink_x + ((64 * unit - kink_x) * t) / 16;
-        path.points[16 + i].y = height - (height * t) / 16;
+    const i32 span = 128 * unit;
+    const i32 kink = static_cast<i32>(along * 2u);
+    // A thin closed ribbon avoids a closed stroke turning 180 degrees back
+    // over itself at the nut. Uniform x spacing keeps every edge nonzero,
+    // even when the kink reaches an endpoint or motion is disabled.
+    const i32 half_width = 192; // touching 0.75 px strokes: 1.5 px total
+    for (u32 i = 0; i < 32; ++i) {
+        const i32 distance = span * static_cast<i32>(i) / 31;
+        const i32 y = distance == 0 || distance == span ? 0
+            : distance <= kink ? height * distance / kink
+            : height * (span - distance) / (span - kink);
+        path.points[i] = {distance - 64 * unit, y - half_width};
+        path.points[63 - i] = {distance - 64 * unit, y + half_width};
     }
-    path.points[31].x = 64 * unit;
-    path.points[31].y = 0;
-    for (u32 i = 0; i < 32; ++i) path.points[32 + i] = path.points[31 - i];   // retrace
     path.key = key;
 }
 
