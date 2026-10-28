@@ -107,7 +107,7 @@ Notes below about 44 Hz fold up an octave.
   eight slots are shared by every track through `LeasePool`, so at most eight
   melody notes sound at once and a ninth takes the oldest note's strings. That
   also bounds the engine's worst-case CPU.
-- Memory: 18,256 bytes shared plus 92 bytes per voice (128 voices).
+- Memory: 18,384 bytes shared plus 96 bytes per voice (128 voices).
 - Internal mixing stays in Q15 until the public Q31 output boundary. The
   half-band decimator uses four history values held in registers. The string
   solver setup lives in `strings.cpp`; the shared sample kernels compile in
