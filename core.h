@@ -42,6 +42,10 @@ struct DetunedCopy {
 struct MelodySlot {
     String main;
     DetunedCopy twin;
+    // What a restarted note needs to carry on bowing this string (a tie).
+    u32 pitch;       // last pitch increment bowed
+    u32 signature;   // the track controls at note start
+    i32 bow, twin_gain;
 };
 
 // A periodic approximation of a drone string; phase persists across notes.
@@ -88,6 +92,7 @@ struct Voice {
     u32 slot;            // melody lease
     u32 claim_pending;   // take over the drones on this note
     u32 stroke_pending;  // a note-start coup for the chien
+    u32 note_pending;    // lease or tie the strings on the next render
     u32 random;
     i32 bow;             // smoothed bow velocity
     i32 noise;

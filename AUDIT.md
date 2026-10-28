@@ -41,7 +41,7 @@ All rendered waves remain Q15 with 32-bit intermediates. Fractional interpolatio
 remains in the physical solver and the detuned copy. Nearest-sample delay reads
 were tried and rejected because they failed the existing eight-cent tuning limit.
 A physical twin at 11.025 kHz was also tried; the detuned copy is the chosen
-lower-cost implementation. Shared state is 18,256 bytes, with 92 bytes per voice.
+lower-cost implementation. Shared state is 18,384 bytes, with 96 bytes per voice.
 
 Drone and Unison mixing, chien filtering and their envelope smoothing use
 arithmetic right shifts for power-of-two scaling. This rounds negative values

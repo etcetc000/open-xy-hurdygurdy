@@ -369,16 +369,53 @@ void initialize(Voice& voice, Shared& shared, u32 owner) {
     start(voice, shared, owner);
 }
 
-// A note: lease the melody strings (kept when this voice still holds them, so
-// repeated notes on one voice stay legato), ask for the drones and a coup.
-void start(Voice& voice, Shared& shared, u32 owner) {
-    const u32 held = voice.slot;
-    voice.slot = shared.melody.acquire(owner, voice.slot);
-    if (voice.slot != held) voice.bow = 0;   // fresh strings: the wheel bites anew
+// A note: ask for the drones and a coup. The strings are leased in render,
+// where the pitch is known.
+void start(Voice& voice, Shared&, u32) {
+    voice.note_pending = 1;
     voice.claim_pending = 1;
     voice.stroke_pending = 1;
     voice.click = 536870912;  // 0.25
 }
+
+namespace {
+u32 signature_of(opxy::Parameters parameters) {
+    u32 s = 0;
+    for (u32 p = 0; p < 8; ++p) s = s * 31u + (static_cast<u32>(parameters[p]) >> 20);
+    return s | 1u;   // never zero, so a cleared slot never matches
+}
+
+// A note that restarts the pitch its track is already bowing (a looping bar,
+// or a held note sent again) is a tie: it keeps the string, the bow speed and
+// the unison, with no key knock or coup. Otherwise repeated notes on one voice
+// keep their strings (legato) and new notes lease fresh ones.
+void lease(Voice& voice, Shared& shared, u32 owner, u32 increment, u32 signature) {
+    auto& pool = shared.melody;
+    MelodySlot* held = pool.get(owner, voice.slot);
+    u32 tie = held && held->pitch == increment && held->signature == signature ? voice.slot : 0;
+    for (u32 i = 0; !tie && i < melody_slots; ++i) {
+        const MelodySlot& r = pool.resources[i];
+        if (pool.owners[i] && pool.owners[i] != owner && r.pitch == increment && r.signature == signature) {
+            pool.release(owner, voice.slot);
+            pool.owners[i] = owner;   // the old note falls silent; this one carries on
+            voice.bow = r.bow;
+            voice.twin_gain = r.twin_gain;
+            voice.pitch_period = 0;
+            tie = i + 1;
+        }
+    }
+    if (tie) {
+        voice.slot = pool.acquire(owner, tie);   // owned: only refreshes its age
+        voice.click = 0;
+        voice.stroke_pending = 0;
+        return;
+    }
+    const u32 kept = voice.slot;
+    voice.slot = pool.acquire(owner, voice.slot);
+    if (voice.slot != kept) voice.bow = 0;   // fresh strings: the wheel bites anew
+    if (MelodySlot* slot = pool.get(owner, voice.slot)) slot->signature = signature;
+}
+}  // namespace
 
 void destroy(Voice& voice, Shared& shared, u32 owner) {
     shared.melody.release(owner, voice.slot);
@@ -400,6 +437,10 @@ static void render_internal(Voice& voice, Shared& shared, u32 owner, opxy::Outpu
     voice.claim_pending = 0;
     const bool owns = wants_drones && shared.drone_owner == owner;
     if (!wants_drones && shared.drone_owner == owner) shared.drone_owner = 0;
+    if (voice.note_pending) {
+        voice.note_pending = 0;
+        lease(voice, shared, owner, pitch[0], signature_of(parameters));
+    }
     const bool stroke = voice.stroke_pending != 0;
     voice.stroke_pending = 0;
 
@@ -470,7 +511,9 @@ static void render_internal(Voice& voice, Shared& shared, u32 owner, opxy::Outpu
             }
             voice.click = next < 2048 ? 0 : next;
         }
-
+        slot->pitch = voice.pitch_increment;
+        slot->bow = voice.bow;
+        slot->twin_gain = voice.twin_gain;
     } else {
         // The pool lent this voice's strings to a newer note: silent until restruck.
         for (u32 i = 0; i < render_frames; ++i) output[i] = 0;
